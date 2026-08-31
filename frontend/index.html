@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <!-- iOS before 16.4 ignores the manifest's display:standalone and relies
+         on these instead; harmless on newer versions. Without the first one a
+         home-screen launch opens in a Safari tab rather than its own window. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Stats" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
     <meta
@@ -11,6 +17,24 @@
       content="Upload a dataset and run statistical tests (t-tests, ANOVA, chi-square, regression and more) entirely in your browser."
     />
     <title>Stats Analysis</title>
+    <script>
+      // `beforeinstallprompt` can fire before the app bundle has even parsed:
+      // Chrome decides the app is installable as soon as it has the manifest
+      // and an active service worker, which on a repeat visit happens well
+      // before React mounts. The event cannot be recovered afterwards, so
+      // capture it here — this inline script runs far earlier than the
+      // deferred module bundle — and let InstallPrompt read it on mount.
+      window.__installPrompt = null;
+      addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault();
+        window.__installPrompt = e;
+        dispatchEvent(new Event("installpromptchange"));
+      });
+      addEventListener("appinstalled", function () {
+        window.__installPrompt = null;
+        dispatchEvent(new Event("installpromptchange"));
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

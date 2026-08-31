@@ -38,7 +38,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt", not "autoUpdate": a silent swap could replace the engine
+      // mid-analysis. UpdateToast asks first.
+      registerType: "prompt",
       includeAssets: [
         "favicon.svg",
         "robots.txt",

@@ -1,0 +1,12 @@
+<!-- iOS composites apple-touch-icon over black and applies its own squircle
+     mask, so this source is deliberately full-bleed and opaque: no rounded
+     corners of our own (they would show as black wedges) and the bars inset
+     enough that the mask cannot clip them. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" fill="#0f172a" />
+  <g transform="translate(32 32) scale(0.74) translate(-32 -32)">
+    <rect x="12" y="34" width="8" height="18" rx="2" fill="#38bdf8" />
+    <rect x="28" y="24" width="8" height="28" rx="2" fill="#818cf8" />
+    <rect x="44" y="14" width="8" height="38" rx="2" fill="#f472b6" />
+  </g>
+</svg>

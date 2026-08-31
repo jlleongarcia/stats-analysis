@@ -1,6 +1,7 @@
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { EngineBanner } from "./components/EngineBanner";
-import { InstallButton } from "./components/InstallButton";
+import { InstallPrompt } from "./pwa/InstallPrompt";
+import { UpdateToast } from "./pwa/UpdateToast";
 import { DataPage } from "./pages/DataPage";
 import { AnalyzePage } from "./pages/AnalyzePage";
 import { ExplorePage } from "./pages/ExplorePage";
@@ -25,7 +26,6 @@ export default function App() {
         </nav>
         <div className="app__ctx">
           {active ? <span className="muted">{active.name}</span> : <span className="muted">no dataset</span>}
-          <InstallButton />
         </div>
       </header>
 
@@ -45,6 +45,9 @@ export default function App() {
       <footer className="app__foot muted">
         All computation runs locally in your browser via Pyodide · nothing is uploaded.
       </footer>
+
+      <InstallPrompt />
+      <UpdateToast />
     </div>
   );
 }

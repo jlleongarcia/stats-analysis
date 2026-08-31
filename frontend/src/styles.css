@@ -159,3 +159,55 @@ select, input[type="number"], input[type="text"] {
 
 .params { display: flex; flex-wrap: wrap; gap: 1rem; }
 .params__field { flex-direction: row; align-items: center; gap: .5rem; }
+
+/* --- PWA: install banner, update toast --- */
+
+.install-banner {
+  position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 14px;
+  width: min(480px, calc(100vw - 32px));
+  padding: 14px 16px;
+  background: var(--panel-2); border: 1px solid var(--accent);
+  border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+  /* clear the iPhone home indicator when running standalone */
+  margin-bottom: env(safe-area-inset-bottom);
+}
+.install-banner__icon { font-size: 22px; line-height: 1; }
+.install-banner__body {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  font-size: 13px; color: var(--muted);
+}
+.install-banner__body strong { color: var(--text); font-size: 14px; }
+.install-banner__body em { color: var(--accent); font-style: normal; }
+.install-banner__button {
+  padding: 8px 16px; border-radius: 8px; border: none;
+  background: var(--accent); color: #04283a;
+  font-weight: 600; font-size: 13px; white-space: nowrap; cursor: pointer;
+}
+.install-banner__dismiss {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 14px; padding: 4px; align-self: flex-start; cursor: pointer;
+}
+.install-banner__dismiss:hover { color: var(--text); }
+
+.pwa-toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 50;
+  display: flex; align-items: center; gap: 14px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px;
+  background: var(--panel-2); border: 1px solid var(--accent);
+  border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+  font-size: 13px;
+  margin-bottom: env(safe-area-inset-bottom);
+}
+.pwa-toast--muted { border-color: var(--border); }
+.pwa-toast__actions { display: flex; gap: 8px; flex-shrink: 0; }
+.pwa-toast__button {
+  padding: 6px 14px; border-radius: 6px; border: none;
+  background: var(--accent); color: #04283a; font-weight: 600; font-size: 13px; cursor: pointer;
+}
+.pwa-toast__dismiss {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 13px; padding: 6px; cursor: pointer;
+}
+.pwa-toast__dismiss:hover { color: var(--text); }
