@@ -1,0 +1,34 @@
+# Two ways to run the app:
+#   docker compose up web    -> production build, nginx on http://localhost:8080
+#   docker compose up dev    -> Vite dev server with HMR on http://localhost:5173
+#
+# Everything is computed client-side (Pyodide), so there is no backend service.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: stats-analysis:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend-base
+    working_dir: /app/frontend
+    entrypoint: ["sh", "/app/scripts/dev-entrypoint.sh"]
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+    environment:
+      SKIP_WHEEL_BUILD: "1"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app/frontend
+      - ./scripts:/app/scripts
+      - /app/frontend/node_modules
+    profiles: ["dev"]

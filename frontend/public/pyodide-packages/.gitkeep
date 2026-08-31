@@ -1,0 +1,2 @@
+# The stats_core wheel is copied here by scripts/copy-wheel.mjs (npm run sync-core).
+# The .whl itself is gitignored; this folder is kept so the path always exists.

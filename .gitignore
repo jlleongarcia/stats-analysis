@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/dev-dist/
+*.local
+
+# Generated: stats_core wheel copied into the frontend for Pyodide
+frontend/public/pyodide-packages/*.whl
+frontend/public/pyodide-packages/manifest.json
+
+# Test data (proprietary sample spreadsheets — keep the pytest code, ignore the data)
+tests/*.xls
+tests/*.XLS
+tests/*.xlsx
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Docker
+.env
