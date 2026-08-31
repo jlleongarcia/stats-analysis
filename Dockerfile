@@ -25,6 +25,7 @@ COPY frontend ./
 COPY scripts /app/scripts
 COPY --from=wheel /opt/stats_core.whl /opt/stats_core.whl
 RUN mkdir -p public/pyodide-packages && cp /opt/stats_core.whl public/pyodide-packages/stats_core.whl
+EXPOSE 7100
 
 # ---------------------------------------------------------------------------
 # Stage 3 — production static build.

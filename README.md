@@ -34,8 +34,8 @@ docker-compose.yml      `web` (prod) and `dev` (Vite HMR) services
 ### Docker (no toolchain needed)
 
 ```bash
-docker compose up web            # http://localhost:8080  (production build)
-docker compose --profile dev up dev   # http://localhost:5173  (Vite + HMR)
+docker compose up web                 # http://localhost:7100  (production build)
+docker compose --profile dev up dev   # http://localhost:7100  (Vite + HMR)
 ```
 
 ### Local

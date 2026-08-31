@@ -9,7 +9,7 @@
     "dev": "vite",
     "prebuild": "npm run sync-core",
     "build": "tsc && vite build",
-    "preview": "vite preview --port 4173",
+    "preview": "vite preview --port 7100",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -11,7 +11,8 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
-  server: { port: 5173, strictPort: false },
+  server: { port: 7100, strictPort: true },
+  preview: { port: 7100, strictPort: true },
   plugins: [
     react(),
     VitePWA({
