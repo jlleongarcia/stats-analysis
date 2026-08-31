@@ -39,12 +39,11 @@ function manualHint(): ManualHint {
   if (/iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) {
     return "ios";
   }
-  // Safari gained "Add to Dock" in version 17 (macOS Sonoma). Before that a Mac
-  // could not install a web app at all, so offering instructions would be a lie.
-  if (/macintosh/i.test(ua) && isSafari(ua)) {
-    const major = Number(ua.match(/version\/(\d+)/i)?.[1] ?? 0);
-    if (major >= 17) return "macos-safari";
-  }
+  // Safari on macOS is a dead end for this app. "Add to Dock" (Safari 17+)
+  // creates a standalone window, but tested against this build it does not keep
+  // the Pyodide cache, so the app cannot start without a network -- which is the
+  // whole point of installing it. Point those users at Chrome/Edge instead.
+  if (/macintosh/i.test(ua) && isSafari(ua)) return "macos-safari";
   return null;
 }
 
@@ -54,12 +53,11 @@ function manualHint(): ManualHint {
  * button. That event often fires before React mounts, so index.html captures it
  * into `window.__installPrompt` and notifies us via `installpromptchange`.
  *
- * Safari has no programmatic install API on either iOS or macOS and never fires
- * the event, so those get an instruction card instead — without it they get no
- * indication the app can be installed at all. On iOS that is more than a
- * convenience: WebKit evicts cached data after about a week of disuse and
- * home-screen web apps are exempt, so installing is what keeps the ~115 MB
- * Pyodide cache from being thrown away.
+ * Safari has no programmatic install API and never fires the event, so it gets
+ * an instruction card instead. The two Safaris need different advice: on iOS,
+ * Add to Home Screen genuinely works (and is what stops WebKit evicting the
+ * ~115 MB Pyodide cache after a week of disuse); on macOS, Add to Dock does not
+ * survive offline, so the card sends those users to Chrome or Edge.
  */
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
@@ -107,7 +105,8 @@ export function InstallPrompt() {
           </span>
         ) : (
           <span>
-            Choose <em>File</em> → <em>Add to Dock</em> — it then works offline.
+            Open this page in <em>Chrome</em> or <em>Edge</em> to install it. Safari's{" "}
+            <em>Add to Dock</em> does not keep the engine cached, so it will not work offline.
           </span>
         )}
       </div>
