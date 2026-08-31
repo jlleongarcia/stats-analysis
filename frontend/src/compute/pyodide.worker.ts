@@ -65,8 +65,19 @@ function toError(err: unknown): { message: string; kindHint: "data" | "internal"
   if (m) return { message: m[1].trim(), kindHint: "data" };
   const v = raw.match(/ValueError:\s*(.*?)(?:\n|$)/);
   if (v) return { message: v[1].trim(), kindHint: "data" };
-  const lines = raw.trim().split("\n");
-  return { message: lines[lines.length - 1] || raw, kindHint: "internal" };
+  // Pyodide's loadPackage failures end with a bare "See https://pyodide.org/..."
+  // pointer, so taking the last line throws away the only informative part.
+  // Walk back to the last line that actually says something.
+  const lines = raw
+    .trim()
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l && !/^see https?:\/\//i.test(l) && !/^\^+$/.test(l));
+  const last = lines[lines.length - 1];
+  // Traceback frames are noise on their own; if that is all we have, keep the
+  // whole thing rather than reporting a filename and line number.
+  const useful = last && !/^File "/.test(last) ? last : raw.trim();
+  return { message: useful, kindHint: "internal" };
 }
 
 self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
@@ -100,6 +111,9 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
       return;
     }
   } catch (err) {
+    // The banner only has room for one line; keep the untouched original in the
+    // console so a failure can always be diagnosed without a new deploy.
+    console.error("[stats-analysis] engine error", err);
     const { message, kindHint } = toError(err);
     post({ kind: "error", id: (req as { id: string }).id, message, kindHint });
   }

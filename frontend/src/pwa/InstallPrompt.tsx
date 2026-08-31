@@ -65,6 +65,10 @@ export function InstallPrompt() {
   );
   const [hint, setHint] = useState<ManualHint>(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISSED_KEY) === "1");
+  // Transient, unlike `dismissed`: installing should hide the banner for this
+  // page load, but must not be remembered. If the user later uninstalls, the
+  // offer has to come back — a persisted flag would suppress it forever.
+  const [justInstalled, setJustInstalled] = useState(false);
 
   useEffect(() => {
     if (isStandalone() || dismissed) return;
@@ -74,7 +78,7 @@ export function InstallPrompt() {
     // The event may have fired between render and this effect.
     sync();
 
-    const onInstalled = () => dismiss();
+    const onInstalled = () => setJustInstalled(true);
     window.addEventListener("appinstalled", onInstalled);
 
     setHint(manualHint());
@@ -90,7 +94,7 @@ export function InstallPrompt() {
     setDismissed(true);
   }
 
-  if (dismissed || isStandalone() || (!deferredPrompt && !hint)) return null;
+  if (dismissed || justInstalled || isStandalone() || (!deferredPrompt && !hint)) return null;
 
   return (
     <div className="install-banner">

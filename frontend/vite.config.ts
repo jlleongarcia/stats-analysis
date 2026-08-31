@@ -38,9 +38,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // "prompt", not "autoUpdate": a silent swap could replace the engine
-      // mid-analysis. UpdateToast asks first.
-      registerType: "prompt",
+      // "autoUpdate": a new service worker takes over and reloads the page as
+      // soon as it is fetched. Under "prompt" clients stayed pinned to whatever
+      // build they first saw until someone noticed the toast, so deployed fixes
+      // silently never reached them. UpdateToast's offlineReady still fires;
+      // its needRefresh branch is unused in this mode.
+      registerType: "autoUpdate",
       includeAssets: [
         "favicon.svg",
         "robots.txt",
@@ -83,7 +86,10 @@ export default defineConfig({
             options: {
               cacheName: `pyodide-${PYODIDE_VERSION}`,
               expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
+              // 200 only. These are same-origin, so status 0 (opaque) can never
+              // be a real hit -- allowing it lets an error or challenge page get
+              // cached, and CacheFirst would then serve it forever.
+              cacheableResponse: { statuses: [200] },
             },
           },
           {
@@ -92,7 +98,7 @@ export default defineConfig({
             options: {
               cacheName: "stats-core-wheel",
               expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheableResponse: { statuses: [200] },
             },
           },
         ],
