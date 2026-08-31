@@ -42,7 +42,8 @@ h3 { font-size: 1rem; margin: 1.2rem 0 .4rem; }
   padding: .35rem .7rem; border-radius: 8px; text-decoration: none; color: var(--muted);
 }
 .app__nav a.active { background: var(--panel-2); color: var(--text); }
-.app__ctx { margin-left: auto; }
+.app__ctx { margin-left: auto; display: flex; align-items: center; gap: .8rem; }
+.btn--install { padding: .3rem .7rem; font-size: .85rem; }
 .app__main { flex: 1; padding: 1.4rem 1.2rem; max-width: 1100px; width: 100%; margin: 0 auto; }
 .app__foot { padding: 1rem 1.2rem; border-top: 1px solid var(--border); text-align: center; }
 

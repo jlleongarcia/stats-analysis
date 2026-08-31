@@ -78,11 +78,13 @@ export class ComputeClient {
   /** Idempotent: safe to call from multiple places; boot happens once. */
   init(): Promise<void> {
     if (!this.booted) {
-      const wheelUrl = new URL(
-        `${import.meta.env.BASE_URL}pyodide-packages/stats_core.whl`,
-        self.location.href,
-      ).href;
-      this.booted = this.request<void>((id) => ({ kind: "init", id, wheelUrl }));
+      const asset = (path: string) =>
+        new URL(`${import.meta.env.BASE_URL}${path}`, self.location.href).href;
+      // Resolved here rather than in the worker: only the main thread knows
+      // Vite's BASE_URL, and the worker's own location sits under /assets/.
+      const wheelUrl = asset(`pyodide-packages/${__STATS_CORE_WHEEL__}`);
+      const pyodideUrl = asset("pyodide/");
+      this.booted = this.request<void>((id) => ({ kind: "init", id, wheelUrl, pyodideUrl }));
     }
     return this.booted;
   }

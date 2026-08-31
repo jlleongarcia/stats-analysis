@@ -5,7 +5,7 @@ import type { Registry, ParamValues, RoleMapping, TestResult } from "../types";
 export type ColumnarData = Record<string, unknown[]>;
 
 export type WorkerRequest =
-  | { kind: "init"; id: string; wheelUrl: string }
+  | { kind: "init"; id: string; wheelUrl: string; pyodideUrl: string }
   | { kind: "registry"; id: string }
   | {
       kind: "run";

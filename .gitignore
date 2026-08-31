@@ -17,7 +17,9 @@ frontend/dev-dist/
 
 # Generated: stats_core wheel copied into the frontend for Pyodide
 frontend/public/pyodide-packages/*.whl
-frontend/public/pyodide-packages/manifest.json
+
+# Vendored Pyodide runtime (~115 MB) - fetched by scripts/fetch-pyodide.mjs
+frontend/public/pyodide/
 
 # Test data (proprietary sample spreadsheets — keep the pytest code, ignore the data)
 tests/*.xls

@@ -8,8 +8,6 @@
  */
 import type { WorkerRequest, WorkerResponse } from "./protocol";
 
-const PYODIDE_VERSION = __PYODIDE_VERSION__;
-const CDN = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let pyodide: any = null;
@@ -35,10 +33,12 @@ def _registry():
     return json.dumps(_gr())
 `;
 
-async function boot(wheelUrl: string): Promise<void> {
+async function boot(wheelUrl: string, pyodideUrl: string): Promise<void> {
   post({ kind: "progress", stage: "Downloading Python runtime" });
-  const { loadPyodide } = await import(/* @vite-ignore */ `${CDN}pyodide.mjs`);
-  pyodide = await loadPyodide({ indexURL: CDN });
+  // Served from our own origin (see scripts/fetch-pyodide.mjs), never a CDN:
+  // the app has to keep working on an offline or firewalled network.
+  const { loadPyodide } = await import(/* @vite-ignore */ `${pyodideUrl}pyodide.mjs`);
+  pyodide = await loadPyodide({ indexURL: pyodideUrl });
 
   post({ kind: "progress", stage: "Loading scientific packages", detail: "numpy, pandas, scipy, statsmodels" });
   await pyodide.loadPackage(["micropip", "numpy", "pandas", "scipy", "statsmodels"]);
@@ -53,8 +53,8 @@ async function boot(wheelUrl: string): Promise<void> {
   post({ kind: "progress", stage: "Ready" });
 }
 
-function ensureBooted(wheelUrl: string): Promise<void> {
-  if (!bootPromise) bootPromise = boot(wheelUrl);
+function ensureBooted(wheelUrl: string, pyodideUrl: string): Promise<void> {
+  if (!bootPromise) bootPromise = boot(wheelUrl, pyodideUrl);
   return bootPromise;
 }
 
@@ -73,7 +73,7 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
   const req = ev.data;
   try {
     if (req.kind === "init") {
-      await ensureBooted(req.wheelUrl);
+      await ensureBooted(req.wheelUrl, req.pyodideUrl);
       post({ kind: "ready", id: req.id });
       return;
     }

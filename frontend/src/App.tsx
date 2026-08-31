@@ -1,5 +1,6 @@
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import { EngineBanner } from "./components/EngineBanner";
+import { InstallButton } from "./components/InstallButton";
 import { DataPage } from "./pages/DataPage";
 import { AnalyzePage } from "./pages/AnalyzePage";
 import { ExplorePage } from "./pages/ExplorePage";
@@ -24,6 +25,7 @@ export default function App() {
         </nav>
         <div className="app__ctx">
           {active ? <span className="muted">{active.name}</span> : <span className="muted">no dataset</span>}
+          <InstallButton />
         </div>
       </header>
 

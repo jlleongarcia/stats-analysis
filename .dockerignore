@@ -12,6 +12,6 @@ tests/*.xls
 tests/*.XLS
 tests/*.xlsx
 frontend/public/pyodide-packages/*.whl
-frontend/public/pyodide-packages/manifest.json
 *.md
 !README.md
+frontend/public/pyodide/
