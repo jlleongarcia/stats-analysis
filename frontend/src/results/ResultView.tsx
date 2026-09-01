@@ -5,7 +5,7 @@ import type { TestResult } from "../types";
 import { fmtNum, fmtP } from "./format";
 
 export function ResultView({ result }: { result: TestResult }) {
-  const spec = useMemo(() => (result.plotSpec ? specFromPlot(result.plotSpec) : null), [result.plotSpec]);
+  const specs = useMemo(() => result.plotSpecs.map(specFromPlot), [result.plotSpecs]);
 
   return (
     <div className="result">
@@ -61,12 +61,12 @@ export function ResultView({ result }: { result: TestResult }) {
         </section>
       )}
 
-      {spec && (
-        <section>
+      {specs.map((spec, i) => (
+        <section key={i}>
           <h3>Plot</h3>
           <VegaLiteChart spec={spec} />
         </section>
-      )}
+      ))}
 
       {result.tables.map((t) => (
         <section key={t.title}>

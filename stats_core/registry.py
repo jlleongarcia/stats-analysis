@@ -13,10 +13,12 @@ from typing import Any, Callable
 
 import pandas as pd
 
-from stats_core import anova, categorical, correlation, descriptives
+from stats_core import anova, categorical, classification_tree, cluster_analysis
+from stats_core import correlation, descriptives, discriminant
 from stats_core import location_tests as loc
+from stats_core import multivariate as mv
 from stats_core import nonparametric as npar
-from stats_core import normality, regression, variance_tests
+from stats_core import normality, regression, reliability, variance_tests
 from stats_core._util import DataError
 from stats_core.results import TestResult
 
@@ -350,6 +352,141 @@ REGISTRY: tuple[TestSpec, ...] = (
         roles=(_v(), Role("group", "Grouping variable", CATEGORICAL)),
         params=(_ALPHA,),
     ),
+    # ---- multivariate / data reduction ---------------------------------
+    TestSpec(
+        "pca", "Principal component analysis", "multivariate",
+        "Reduces several correlated numeric variables to a small number of "
+        "uncorrelated components that capture most of the variance.",
+        mv.pca,
+        roles=(Role("columns", "Numeric columns (>= 2)", NUMERIC, multiple=True),),
+        params=(
+            Param("standardize", "Standardize variables first", "bool", True),
+            Param("n_components", "Components to retain (blank = all)", "number", None),
+        ),
+    ),
+    TestSpec(
+        "factor_analysis", "Factor analysis", "multivariate",
+        "Models several observed variables as linear combinations of a smaller "
+        "number of unobserved (latent) factors plus unique variance.",
+        mv.factor_analysis,
+        roles=(Role("columns", "Numeric columns (>= 3)", NUMERIC, multiple=True),),
+        params=(
+            Param("n_factors", "Number of factors", "number", 2),
+            Param("method", "Extraction method", "select", "pa", ("pa", "ml"),
+                  "pa = principal axis, ml = maximum likelihood"),
+            Param("rotation", "Rotation", "select", "varimax", ("varimax", "none")),
+        ),
+        assumptions=("Variables are linearly related", "Adequate sample size relative to variable count"),
+    ),
+    TestSpec(
+        "canonical_correlation", "Canonical correlation analysis", "multivariate",
+        "Finds linear combinations of two variable sets that are maximally "
+        "correlated with each other.",
+        mv.canonical_correlation,
+        roles=(
+            Role("set_a", "Variable set A (>= 2)", NUMERIC, multiple=True),
+            Role("set_b", "Variable set B (>= 2)", NUMERIC, multiple=True),
+        ),
+        assumptions=("Linear relationships", "Multivariate normality (for the significance test)"),
+    ),
+    TestSpec(
+        "correspondence_analysis", "Correspondence analysis", "multivariate",
+        "Maps the categories of two categorical variables into a low-dimensional "
+        "space that visualizes their association, from a contingency table.",
+        mv.correspondence_analysis,
+        roles=(
+            Role("rows", "Row variable", CATEGORICAL),
+            Role("columns", "Column variable", CATEGORICAL),
+        ),
+    ),
+    TestSpec(
+        "mds", "Multidimensional scaling", "multivariate",
+        "Places cases in a low-dimensional space so that distances between "
+        "points approximate their dissimilarity in the original variables.",
+        mv.mds,
+        roles=(
+            Role("columns", "Numeric columns (>= 2)", NUMERIC, multiple=True),
+            Role("group", "Color by (optional)", CATEGORICAL, required=False),
+        ),
+        params=(
+            Param("standardize", "Standardize variables first", "bool", True),
+            Param("n_components", "Dimensions to retain", "number", 2),
+        ),
+    ),
+    # ---- clustering -----------------------------------------------------
+    TestSpec(
+        "hierarchical_cluster", "Hierarchical cluster analysis", "clustering",
+        "Agglomerative clustering that builds a tree (dendrogram) of nested "
+        "groupings of cases, cut into a chosen number of clusters.",
+        cluster_analysis.hierarchical_cluster,
+        roles=(Role("columns", "Numeric columns (>= 2)", NUMERIC, multiple=True),),
+        params=(
+            Param("method", "Linkage method", "select", "ward",
+                  ("ward", "complete", "average", "single")),
+            Param("n_clusters", "Number of clusters to cut", "number", 3),
+            Param("standardize", "Standardize variables first", "bool", True),
+        ),
+    ),
+    TestSpec(
+        "kmeans_cluster", "K-means cluster analysis", "clustering",
+        "Partitions cases into k clusters by minimizing within-cluster "
+        "variance around iteratively updated centers.",
+        cluster_analysis.kmeans_cluster,
+        roles=(Role("columns", "Numeric columns (>= 2)", NUMERIC, multiple=True),),
+        params=(
+            Param("k", "Number of clusters (k)", "number", 3),
+            Param("standardize", "Standardize variables first", "bool", True),
+            Param("seed", "Random seed", "number", 0),
+        ),
+    ),
+    # ---- classification ---------------------------------------------------
+    TestSpec(
+        "discriminant_analysis", "Discriminant analysis", "classification",
+        "Finds the linear combination(s) of predictors that best separate "
+        "groups, and classifies cases by their nearest group centroid.",
+        discriminant.discriminant_analysis,
+        roles=(
+            Role("group", "Grouping variable (>= 2 levels)", CATEGORICAL),
+            Role("predictors", "Predictor(s)", NUMERIC, multiple=True),
+        ),
+        assumptions=("Multivariate normality within groups", "Homogeneity of covariance matrices"),
+    ),
+    TestSpec(
+        "general_discriminant_analysis", "General discriminant analysis", "classification",
+        "Discriminant analysis with predictors first adjusted for one or more "
+        "continuous covariates (ANCOVA-style), then discriminated as usual.",
+        discriminant.general_discriminant_analysis,
+        roles=(
+            Role("group", "Grouping variable (>= 2 levels)", CATEGORICAL),
+            Role("predictors", "Predictor(s)", NUMERIC, multiple=True),
+            Role("covariates", "Covariate(s) (optional)", NUMERIC, multiple=True, required=False),
+        ),
+        assumptions=("Multivariate normality within groups", "Homogeneity of covariance matrices",
+                     "Linear predictor-covariate relationship"),
+    ),
+    TestSpec(
+        "classification_tree", "Classification tree", "classification",
+        "Recursively splits cases on predictor thresholds to classify a "
+        "categorical outcome; reports the tree, importances and accuracy.",
+        classification_tree.classification_tree,
+        roles=(
+            Role("outcome", "Outcome (categorical)", ANY),
+            Role("predictors", "Predictor(s)", NUMERIC, multiple=True),
+        ),
+        params=(
+            Param("max_depth", "Max tree depth", "number", 3),
+            Param("min_samples_leaf", "Min samples per leaf", "number", 5),
+            Param("criterion", "Split criterion", "select", "gini", ("gini", "entropy", "log_loss")),
+        ),
+    ),
+    # ---- reliability ------------------------------------------------------
+    TestSpec(
+        "reliability_analysis", "Reliability / item analysis", "reliability",
+        "Cronbach's alpha and item-total statistics for a set of items "
+        "measuring the same underlying construct (e.g. a survey scale).",
+        reliability.reliability_analysis,
+        roles=(Role("columns", "Items (>= 3 numeric columns)", NUMERIC, multiple=True),),
+    ),
 )
 
 _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}
@@ -357,6 +494,7 @@ _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}
 FAMILIES: tuple[str, ...] = (
     "descriptive", "normality", "t-test", "nonparametric",
     "anova", "correlation", "regression", "categorical", "variance",
+    "multivariate", "clustering", "classification", "reliability",
 )
 
 

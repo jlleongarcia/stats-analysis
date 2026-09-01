@@ -69,12 +69,12 @@ def _bivariate(frame, roles, params, method: str, test_id: str, name: str) -> Te
         assumptions=assumptions,
         tables=[ResultTable("Correlation", ["coefficient", "ci95_low", "ci95_high", "p"],
                             [[r, lo, hi, float(p)]])],
-        plot_spec={
+        plot_specs=[{
             "kind": "scatter",
             "data": {"x": x.tolist(), "y": y.tolist()},
             "encoding": {"x": {"field": "x", "title": x_col}, "y": {"field": "y", "title": y_col}},
             "regression": True,
-        },
+        }],
     )
 
 
@@ -122,7 +122,7 @@ def correlation_matrix(frame: pd.DataFrame, roles: dict, params: dict) -> TestRe
                         [[a, *[float(corr.loc[a, b]) for b in cols]] for a in cols]),
             ResultTable("p-values", ["variable", *cols], p_rows),
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "heatmap",
             "data": {
                 "row": np.repeat(cols, len(cols)).tolist(),
@@ -130,5 +130,5 @@ def correlation_matrix(frame: pd.DataFrame, roles: dict, params: dict) -> TestRe
                 "value": [float(corr.loc[a, b]) for a in cols for b in cols],
             },
             "encoding": {"x": {"field": "col"}, "y": {"field": "row"}, "color": {"field": "value"}},
-        },
+        }],
     )

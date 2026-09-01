@@ -95,7 +95,7 @@ class TestResult:
     effect_sizes: list[EffectSize] = field(default_factory=list)
     assumptions: list[AssumptionCheck] = field(default_factory=list)
     tables: list[ResultTable] = field(default_factory=list)
-    plot_spec: dict[str, Any] | None = None
+    plot_specs: list[dict[str, Any]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     def add_note(self, note: str) -> "TestResult":
@@ -114,7 +114,7 @@ class TestResult:
                 "effectSizes": [e.to_dict() for e in self.effect_sizes],
                 "assumptions": [a.to_dict() for a in self.assumptions],
                 "tables": [t.to_dict() for t in self.tables],
-                "plotSpec": self.plot_spec,
+                "plotSpecs": self.plot_specs,
                 "notes": self.notes,
             }
         )

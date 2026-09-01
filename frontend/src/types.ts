@@ -84,7 +84,8 @@ export interface ResultTable {
 }
 
 export interface PlotSpec {
-  kind: "histogram" | "box" | "scatter" | "bar" | "heatmap" | "interaction";
+  kind: "histogram" | "box" | "scatter" | "bar" | "heatmap" | "interaction"
+      | "line" | "dendrogram" | "tree";
   data: Record<string, unknown[]>;
   encoding?: Record<string, { field: string; title?: string }>;
   [k: string]: unknown;
@@ -100,7 +101,7 @@ export interface TestResult {
   effectSizes: EffectSize[];
   assumptions: AssumptionCheck[];
   tables: ResultTable[];
-  plotSpec: PlotSpec | null;
+  plotSpecs: PlotSpec[];
   notes: string[];
 }
 

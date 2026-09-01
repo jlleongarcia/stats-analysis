@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /**
- * Pyodide worker: boots CPython in WASM, installs numpy/pandas/scipy/statsmodels
- * plus the local `stats_core` wheel, then dispatches `run_test` calls.
+ * Pyodide worker: boots CPython in WASM, installs numpy/pandas/scipy/statsmodels/
+ * scikit-learn plus the local `stats_core` wheel, then dispatches `run_test` calls.
  *
  * All data crosses the boundary as JSON strings - this keeps the Python side
  * framework-free and avoids leaking PyProxy handles.
@@ -40,8 +40,12 @@ async function boot(wheelUrl: string, pyodideUrl: string): Promise<void> {
   const { loadPyodide } = await import(/* @vite-ignore */ `${pyodideUrl}pyodide.mjs`);
   pyodide = await loadPyodide({ indexURL: pyodideUrl });
 
-  post({ kind: "progress", stage: "Loading scientific packages", detail: "numpy, pandas, scipy, statsmodels" });
-  await pyodide.loadPackage(["micropip", "numpy", "pandas", "scipy", "statsmodels"]);
+  post({
+    kind: "progress",
+    stage: "Loading scientific packages",
+    detail: "numpy, pandas, scipy, statsmodels, scikit-learn",
+  });
+  await pyodide.loadPackage(["micropip", "numpy", "pandas", "scipy", "statsmodels", "scikit-learn"]);
 
   post({ kind: "progress", stage: "Installing stats_core" });
   // deps=False: numpy/pandas/scipy/statsmodels are already loaded as native

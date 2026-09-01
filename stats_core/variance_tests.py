@@ -41,14 +41,14 @@ def levene(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                             f"Levene {fmt_p(p)}", statistic=float(stat), p_value=float(p))
         ],
         tables=[_group_table(labels, arrays)],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": np.concatenate(arrays).tolist(),
                 "group": np.repeat(labels, [a.size for a in arrays]).tolist(),
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value", "title": value_col}},
-        },
+        }],
     )
 
 

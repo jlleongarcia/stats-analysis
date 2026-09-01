@@ -13,7 +13,7 @@ from stats_core.registry import REGISTRY
 
 REQUIRED_KEYS = {
     "testId", "testName", "summary", "apa", "statistic", "pValue",
-    "effectSizes", "assumptions", "tables", "plotSpec", "notes",
+    "effectSizes", "assumptions", "tables", "plotSpecs", "notes",
 }
 
 
@@ -54,6 +54,19 @@ def _roles_for(test_id, ceras, fame, fame2, two_group_ceras, campaign_col):
         "mcnemar": (None, None, None),
         "levene": (ceras, {"values": num[0], "group": campaign_col}, {}),
         "bartlett": (ceras, {"values": num[0], "group": campaign_col}, {}),
+        "pca": (ceras, {"columns": num}, {}),
+        "factor_analysis": (ceras, {"columns": num}, {}),
+        "canonical_correlation": (ceras, {"set_a": num[:3], "set_b": num[3:6]}, {}),
+        "correspondence_analysis": (fame2, {"rows": "CAMPANA", "columns": "SEASON"}, {}),
+        "mds": (ceras, {"columns": num}, {}),
+        "hierarchical_cluster": (ceras, {"columns": num}, {}),
+        "kmeans_cluster": (ceras, {"columns": num}, {}),
+        "discriminant_analysis": (ceras, {"group": campaign_col, "predictors": num}, {}),
+        "general_discriminant_analysis": (
+            ceras, {"group": campaign_col, "predictors": num[:3], "covariates": [num[3]]}, {},
+        ),
+        "classification_tree": (ceras, {"outcome": campaign_col, "predictors": num}, {}),
+        "reliability_analysis": (ceras, {"columns": num[:4]}, {}),
     }
     return table[test_id]
 

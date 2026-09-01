@@ -81,12 +81,12 @@ def one_sample_t(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 [[n, mean, sd, se, mean - popmean, lo, hi]],
             )
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "histogram",
             "data": {"x": x.tolist()},
             "encoding": {"x": {"field": "x", "title": col}},
             "rule": popmean,
-        },
+        }],
     )
 
 
@@ -173,14 +173,14 @@ def _independent(frame, roles, params, equal_var: bool, test_id: str, name: str)
                 [[mean_diff, float(se), float(df), lo, hi]],
             ),
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": [*a.tolist(), *b.tolist()],
                 "group": [g1] * n1 + [g2] * n2,
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value", "title": value_col}},
-        },
+        }],
     )
 
 
@@ -232,10 +232,10 @@ def paired_t(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 [[n, md, sd, se, lo, hi]],
             )
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "histogram",
             "data": {"x": diff.tolist()},
             "encoding": {"x": {"field": "x", "title": f"{col_a} - {col_b}"}},
             "rule": 0,
-        },
+        }],
     )

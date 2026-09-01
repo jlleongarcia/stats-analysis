@@ -52,7 +52,7 @@ def shapiro_wilk(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 p_value=float(p),
             )
         ],
-        plot_spec=_hist_spec(x, col),
+        plot_specs=[_hist_spec(x, col)],
     )
     if note:
         res.add_note(note)
@@ -88,7 +88,7 @@ def normaltest(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 p_value=float(p),
             )
         ],
-        plot_spec=_hist_spec(x, col),
+        plot_specs=[_hist_spec(x, col)],
     )
 
 
@@ -121,7 +121,7 @@ def ks_normal(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 p_value=float(p),
             )
         ],
-        plot_spec=_hist_spec(x, col),
+        plot_specs=[_hist_spec(x, col)],
     ).add_note(
         "Distribution parameters were estimated from the sample, so the KS "
         "p-value is liberal; prefer Shapiro-Wilk for n < 5000."
@@ -166,5 +166,5 @@ def anderson_darling(frame: pd.DataFrame, roles: dict, params: dict) -> TestResu
                 rows=rows,
             )
         ],
-        plot_spec=_hist_spec(x, col),
+        plot_specs=[_hist_spec(x, col)],
     )

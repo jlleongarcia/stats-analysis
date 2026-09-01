@@ -79,14 +79,82 @@ export function specFromPlot(plot: PlotSpec): TopLevelSpec {
           transform: [{ regression: "y", on: "x" }],
         });
       }
+      const encoding: Record<string, unknown> = {
+        x: { field: "x", type: "quantitative", title: enc.x?.title ?? "x" },
+        y: { field: "y", type: "quantitative", title: enc.y?.title ?? "y" },
+      };
+      if (Array.isArray(plot.data.group)) {
+        encoding.color = { field: "group", type: "nominal", title: enc.color?.title ?? "group" };
+      }
       return {
         ...BASE,
         data: { values },
+        encoding,
+        layer: layers,
+      } as TopLevelSpec;
+    }
+
+    case "line":
+      return {
+        ...BASE,
+        data: { values },
+        mark: { type: "line", point: true, tooltip: true },
         encoding: {
-          x: { field: "x", type: "quantitative", title: enc.x?.title ?? "x" },
+          x: { field: "x", type: "ordinal", title: enc.x?.title ?? "x", sort: null },
           y: { field: "y", type: "quantitative", title: enc.y?.title ?? "y" },
         },
-        layer: layers,
+      } as TopLevelSpec;
+
+    case "dendrogram":
+      return {
+        ...BASE,
+        data: { values },
+        mark: { type: "line", interpolate: "linear" },
+        encoding: {
+          x: { field: "x", type: "quantitative", axis: null },
+          y: { field: "y", type: "quantitative", title: "distance" },
+          detail: { field: "segment", type: "nominal" },
+          order: { field: "order", type: "ordinal" },
+        },
+      } as TopLevelSpec;
+
+    case "tree": {
+      const nodeValues = records(plot.data);
+      const edgesRaw = plot.edges as Record<string, unknown[]> | undefined;
+      const edgeValues = edgesRaw ? records(edgesRaw) : [];
+      return {
+        ...BASE,
+        height: 320,
+        layer: [
+          {
+            data: { values: edgeValues },
+            mark: { type: "rule", color: "#94a3b8" },
+            encoding: {
+              x: { field: "x0", type: "quantitative", axis: null },
+              y: { field: "y0", type: "quantitative", axis: null, scale: { reverse: true } },
+              x2: { field: "x1" },
+              y2: { field: "y1" },
+            },
+          },
+          {
+            data: { values: nodeValues },
+            mark: { type: "point", filled: true, size: 160, tooltip: true },
+            encoding: {
+              x: { field: "x", type: "quantitative", axis: null },
+              y: { field: "y", type: "quantitative", axis: null, scale: { reverse: true } },
+              color: { field: "leaf", type: "nominal", legend: null },
+            },
+          },
+          {
+            data: { values: nodeValues },
+            mark: { type: "text", dy: 16, fontSize: 9, lineBreak: "\n" },
+            encoding: {
+              x: { field: "x", type: "quantitative" },
+              y: { field: "y", type: "quantitative", scale: { reverse: true } },
+              text: { field: "label" },
+            },
+          },
+        ],
       } as TopLevelSpec;
     }
 

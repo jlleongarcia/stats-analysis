@@ -99,9 +99,9 @@ def describe(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
     if len(columns) == 1 and not group_col:
         col = columns[0]
         values = numeric_series(frame, col).dropna().to_numpy(float)
-        result.plot_spec = {
+        result.plot_specs = [{
             "kind": "histogram",
             "data": {"x": values.tolist()},
             "encoding": {"x": {"field": "x", "title": col}},
-        }
+        }]
     return result

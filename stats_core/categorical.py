@@ -60,7 +60,7 @@ def chi_square_independence(frame: pd.DataFrame, roles: dict, params: dict) -> T
                         [[str(idx), *[float(v) for v in expected[i]]]
                          for i, idx in enumerate(tab.index)]),
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "heatmap",
             "data": {
                 "row": np.repeat([str(i) for i in tab.index], tab.shape[1]).tolist(),
@@ -68,7 +68,7 @@ def chi_square_independence(frame: pd.DataFrame, roles: dict, params: dict) -> T
                 "value": tab.to_numpy().reshape(-1).tolist(),
             },
             "encoding": {"x": {"field": "col"}, "y": {"field": "row"}, "color": {"field": "value"}},
-        },
+        }],
     )
 
 
@@ -109,11 +109,11 @@ def chi_square_goodness_of_fit(frame: pd.DataFrame, roles: dict, params: dict) -
             ["category", "observed", "expected"],
             [[str(k), int(o), float(e)] for k, o, e in zip(counts.index, observed, expected)],
         )],
-        plot_spec={
+        plot_specs=[{
             "kind": "bar",
             "data": {"category": [str(k) for k in counts.index], "value": observed.tolist()},
             "encoding": {"x": {"field": "category"}, "y": {"field": "value", "title": "count"}},
-        },
+        }],
     )
 
 

@@ -66,11 +66,11 @@ def mann_whitney(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 ],
             )
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {"value": [*a.tolist(), *b.tolist()], "group": [g1] * n1 + [g2] * n2},
             "encoding": {"x": {"field": "group"}, "y": {"field": "value", "title": value_col}},
-        },
+        }],
     )
 
 
@@ -109,12 +109,12 @@ def wilcoxon_signed_rank(frame: pd.DataFrame, roles: dict, params: dict) -> Test
                 statistic=float(stats.skew(diff)),
             )
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "histogram",
             "data": {"x": diff.tolist()},
             "encoding": {"x": {"field": "x", "title": f"{col_a} - {col_b}"}},
             "rule": 0,
-        },
+        }],
     )
 
 
@@ -141,14 +141,14 @@ def kruskal_wallis(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult
         p_value=float(res.pvalue),
         effect_sizes=[EffectSize("epsilon^2", float(eta2_h))],
         tables=[ResultTable("Group medians", ["group", "n", "median"], rows)],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": np.concatenate(arrays).tolist(),
                 "group": np.repeat(labels, [a.size for a in arrays]).tolist(),
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value", "title": value_col}},
-        },
+        }],
     )
     if res.pvalue < float(params.get("alpha", 0.05)):
         result.add_note(
@@ -184,12 +184,12 @@ def friedman(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
         p_value=float(res.pvalue),
         effect_sizes=[EffectSize("Kendall's W", float(kendall_w))],
         tables=[ResultTable("Conditions", ["column", "median", "mean_rank"], rows)],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": sub.to_numpy(float).T.reshape(-1).tolist(),
                 "group": np.repeat(cols, n).tolist(),
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value"}},
-        },
+        }],
     )

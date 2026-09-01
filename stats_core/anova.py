@@ -77,14 +77,14 @@ def one_way_anova(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 [[lab, a.size, float(a.mean()), float(a.std(ddof=1))] for lab, a in zip(labels, arrays)],
             ),
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": grand.tolist(),
                 "group": np.repeat(labels, [a.size for a in arrays]).tolist(),
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value", "title": value_col}},
-        },
+        }],
     )
 
 
@@ -128,14 +128,14 @@ def welch_anova(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 [[lab, int(nn), float(mm), float(np.sqrt(vv))] for lab, nn, mm, vv in zip(labels, n, m, v)],
             )
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": np.concatenate(arrays).tolist(),
                 "group": np.repeat(labels, [a.size for a in arrays]).tolist(),
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value", "title": value_col}},
-        },
+        }],
     )
 
 
@@ -187,7 +187,7 @@ def two_way_anova(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
         p_value=float(main.loc[key, "PR(>F)"]),
         effect_sizes=effects,
         tables=[ResultTable("ANOVA table", ["source", "SS", "df", "MS", "F", "p"], rows)],
-        plot_spec={
+        plot_specs=[{
             "kind": "interaction",
             "data": {
                 "y": d["y"].tolist(),
@@ -195,7 +195,7 @@ def two_way_anova(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 "b": d["B"].astype(str).tolist(),
             },
             "encoding": {"x": {"field": "a"}, "detail": {"field": "b"}, "y": {"field": "y", "title": dv}},
-        },
+        }],
     )
 
 
@@ -243,14 +243,14 @@ def rm_anova(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
                 [[c, float(wide[c].mean()), float(wide[c].std(ddof=1))] for c in cols],
             )
         ],
-        plot_spec={
+        plot_specs=[{
             "kind": "box",
             "data": {
                 "value": wide[cols].to_numpy(float).T.reshape(-1).tolist(),
                 "group": np.repeat(cols, len(wide)).tolist(),
             },
             "encoding": {"x": {"field": "group"}, "y": {"field": "value"}},
-        },
+        }],
     )
 
 

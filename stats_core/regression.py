@@ -86,7 +86,7 @@ def linear_regression(frame: pd.DataFrame, roles: dict, params: dict) -> TestRes
             ["term", "estimate", "std_error", "t", "p", "ci95_low", "ci95_high"],
             coef_rows,
         )],
-        plot_spec=(
+        plot_specs=[
             {
                 "kind": "scatter",
                 "data": {"x": X[:, 0].tolist(), "y": y.tolist()},
@@ -100,7 +100,7 @@ def linear_regression(frame: pd.DataFrame, roles: dict, params: dict) -> TestRes
                 "encoding": {"x": {"field": "x", "title": "fitted"}, "y": {"field": "y", "title": "residual"}},
                 "rule": 0,
             }
-        ),
+        ],
     )
 
 
