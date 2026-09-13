@@ -1,7 +1,6 @@
 # SPC User Guide
 
-How to run a control chart and establish a Phase I baseline in this app. For the statistics
-behind it, see [spc-methodology.md](./spc-methodology.md).
+How to run a control chart and establish a Phase I baseline in this app.
 
 ---
 
@@ -51,8 +50,31 @@ Import it on the **Data** page as CSV or Excel, then select it as the active dat
 
 ### How much data?
 
-I-MR charts are valid from n ≥ 2, but **n ≥ 30** is the practical minimum for reliable limits.
+I-MR charts are valid from $n \ge 2$, but **$n \ge 30$** is the practical minimum for reliable limits.
 Below about 20 retained points the app marks the baseline provisional.
+
+---
+
+## Choosing a chart
+
+| Your data | Chart |
+|---|---|
+| One measurement per period | **Individuals & Moving Range** |
+| Several per period, subgroup $n \le 8$ | **$\bar{X}$ & $R$** |
+| Several per period, subgroup $n \ge 9$ | **$\bar{X}$ & $S$** |
+
+Subgrouping is worth it when you have it: the within-subgroup spread estimates sigma directly, so
+drift *between* subgroups cannot inflate the limits, and averaging tightens the limits by a factor
+of $\sqrt{n}$. Tell the app which subgroup each row belongs to with a **Subgroup column**, or leave it empty
+and set a **Subgroup size** to chunk consecutive rows.
+
+Every subgroup must hold the same number of observations — Shewhart constants are defined per
+subgroup size — and the app says so explicitly rather than silently averaging over ragged groups.
+A partial trailing subgroup is dropped and reported.
+
+The spread chart ($R$ or $S$) is checked on **both** sides once the subgroup reaches $n = 7$, where the
+lower limit becomes non-zero. A subgroup that is suspiciously *tight* is a real signal: usually
+non-independent measurements, or data that has been rounded or massaged.
 
 ---
 
@@ -74,10 +96,10 @@ capability on an unstable process describes the past but predicts nothing.
 
 | Element | Meaning |
 |---|---|
-| Solid green **CL** | the centre line, x̄ |
-| Dotted amber **UWL / LWL** | warning limits, ±2σ |
-| Dashed red **UAL / LAL** | action limits, ±3σ |
-| Shaded band | the 2–3σ warning zone |
+| Solid green **CL** | the centre line, $\bar{x}$ |
+| Dotted amber **UWL / LWL** | warning limits, $\pm 2\hat{\sigma}$ |
+| Dashed red **UAL / LAL** | action limits, $\pm 3\hat{\sigma}$ |
+| Shaded band | the $2$–$3\hat{\sigma}$ warning zone |
 | Blue circle | in control |
 | Red triangle | flagged by at least one rule |
 
@@ -129,7 +151,7 @@ You will see the final charts, plain-language verdicts, and warnings if the remo
 
 Enter the specification limits — what the process is *required* to meet, not the control limits,
 which describe what it actually does. Capability is computed on the certified baseline, and
-σ_within is taken from it so the numbers match the chart exactly.
+$\hat{\sigma}_{\text{within}}$ is taken from it so the numbers match the chart exactly.
 
 ### 5. Audit trail
 
@@ -177,7 +199,7 @@ but the caveat is there for a reason.
 
 ## Not yet supported
 
-- Subgroup charts (X̄-R, X̄-S) and attribute charts (p, np, c, u) — the constants are in place; the charts are not
+- Attribute charts (p, np, c, u) for defect counts
 - Nelson's 8 and Western Electric rule sets — the four Oakland rules are implemented and configurable
 - Non-normal capability (Box-Cox / ISO 22514 percentile methods)
 - Confidence intervals on Cpk, and Cpm

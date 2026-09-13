@@ -37,6 +37,7 @@ from stats_core.spc import (
     shared_removals,
     spc_call,
 )
+from stats_core.spc.subgroups import build_subgroups
 from stats_core.spc.constants import D2
 
 # --------------------------------------------------------------------------
@@ -692,7 +693,8 @@ class TestRegistryEntries:
         reg = get_registry()
         assert "spc" in reg["families"]
         spc_ids = {t["id"] for t in reg["tests"] if t["family"] == "spc"}
-        assert spc_ids == {"control_chart_imr", "process_capability"}
+        # A superset assertion, not equality: the family is expected to grow.
+        assert {"control_chart_imr", "process_capability"} <= spc_ids
 
     def test_control_chart_emits_two_labelled_panels(self, spc_frame):
         from stats_core import run_test
@@ -977,3 +979,154 @@ class TestAllFourRulesSurvive:
         assert result.rule_config == {
             "rule2_k": 2, "rule2_window": 3, "rule3_k": 8, "rule4_k": 6,
         }
+
+
+# --------------------------------------------------------------------------
+# subgrouped charts (X-bar/R, X-bar/S)
+# --------------------------------------------------------------------------
+
+
+def _subgrouped(n_groups=25, size=5, shift_at=None, spread_at=None, seed=3):
+    rng = np.random.default_rng(seed)
+    values, labels = [], []
+    for g in range(n_groups):
+        mu = 100.0 + (4.0 if g == shift_at else 0.0)
+        sd = 5.0 if g == spread_at else 1.0
+        values.extend(rng.normal(mu, sd, size))
+        labels.extend([f"B{g + 1}"] * size)
+    return {"batch": labels, "m": values}
+
+
+class TestSubgroups:
+    def test_fixed_size_chunking_preserves_row_order(self):
+        s = pd.Series([1.0, 2, 3, 4, 5, 6, 7, 8, 9])
+        sub = build_subgroups(s, size=3)
+        assert sub.n_subgroups == 3
+        assert sub.means.tolist() == [2.0, 5.0, 8.0]
+        assert sub.ranges.tolist() == [2.0, 2.0, 2.0]
+
+    def test_incomplete_trailing_chunk_is_reported_not_silently_used(self):
+        sub = build_subgroups(pd.Series(range(11), dtype=float), size=3)
+        assert sub.n_subgroups == 3
+        assert sub.n_dropped == 2
+
+    def test_subgroup_column_keeps_first_appearance_order(self):
+        values = pd.Series([1.0, 2, 3, 4, 5, 6])
+        groups = pd.Series(["z", "z", "a", "a", "m", "m"])
+        sub = build_subgroups(values, groups=groups)
+        assert list(sub.labels) == ["z", "a", "m"]  # not sorted
+
+    def test_ragged_subgroups_are_refused_with_guidance(self):
+        values = pd.Series([1.0, 2, 3, 4, 5])
+        groups = pd.Series(["a", "a", "b", "b", "b"])
+        with pytest.raises(DataError, match="same number of observations"):
+            build_subgroups(values, groups=groups)
+
+    def test_subgroup_of_one_points_at_the_individuals_chart(self):
+        with pytest.raises(DataError, match="individuals"):
+            build_subgroups(pd.Series([1.0, 2, 3]), size=1)
+
+    def test_means_chart_limits_match_the_textbook_a2_factor(self):
+        """Our limits come from sigma/sqrt(n); A2 is the classic shortcut."""
+        from stats_core.spc.constants import constants_for
+        from stats_core.spc.subgroups import xbar_r_limits
+
+        sub = build_subgroups(pd.Series(_subgrouped()["m"]), size=5)
+        lim = xbar_r_limits(sub)
+        a2 = constants_for(5).A2
+        assert lim["i_ucl"] == pytest.approx(lim["x_bar"] + a2 * lim["r_bar"], rel=1e-3)
+        assert lim["i_lcl"] == pytest.approx(lim["x_bar"] - a2 * lim["r_bar"], rel=1e-3)
+
+    def test_means_chart_limits_match_the_textbook_a3_factor(self):
+        from stats_core.spc.constants import constants_for
+        from stats_core.spc.subgroups import xbar_s_limits
+
+        sub = build_subgroups(pd.Series(_subgrouped()["m"]), size=5)
+        lim = xbar_s_limits(sub)
+        a3 = constants_for(5).A3
+        assert lim["i_ucl"] == pytest.approx(lim["x_bar"] + a3 * lim["s_bar"], rel=1e-3)
+
+    def test_range_and_sd_agree_on_sigma(self):
+        from stats_core.spc.subgroups import xbar_r_limits, xbar_s_limits
+
+        sub = build_subgroups(pd.Series(_subgrouped()["m"]), size=5)
+        r, s = xbar_r_limits(sub), xbar_s_limits(sub)
+        assert r["sigma_within"] == pytest.approx(s["sigma_within"], rel=0.1)
+
+    def test_subgroup_limits_are_tighter_than_individuals(self):
+        """Averaging shrinks the limits by sqrt(n) - the reason to subgroup."""
+        from stats_core.spc.subgroups import xbar_r_limits
+
+        data = _subgrouped()["m"]
+        sub = build_subgroups(pd.Series(data), size=5)
+        grouped = xbar_r_limits(sub)
+        individual = compute_limits(pd.Series(data))
+        assert (grouped["i_ucl"] - grouped["i_cl"]) < (individual["i_ucl"] - individual["i_cl"])
+
+    def test_spread_rules_catch_a_low_outlier_when_the_limit_exists(self):
+        from stats_core.spc.rules import apply_spread_rules
+
+        spread = pd.Series([5.0, 5.1, 4.9, 0.2, 5.0])
+        # n >= 7 gives a non-zero lower limit, and a suspiciously tight subgroup
+        # is a real signal rather than good news.
+        assert apply_spread_rules(spread, ucl=9.0, lcl=1.0).iloc[3]
+        # With no lower limit (n < 7) the same point is not a violation.
+        assert not apply_spread_rules(spread, ucl=9.0, lcl=0.0).iloc[3]
+
+
+class TestSubgroupEntries:
+    def test_both_variants_are_registered(self):
+        from stats_core import get_registry
+
+        ids = {t["id"] for t in get_registry()["tests"] if t["family"] == "spc"}
+        assert {"control_chart_xbar_r", "control_chart_xbar_s"} <= ids
+
+    def test_shifted_subgroup_is_flagged_on_the_means_chart(self):
+        from stats_core import run_test
+
+        data = _subgrouped(shift_at=12)
+        out = run_test("control_chart_xbar_r", data, {"values": "m", "subgroup": "batch"}, {})
+        flagged = [row[0] for row in out["tables"][0]["rows"]]
+        assert "B13" in flagged
+
+    def test_erratic_subgroup_is_flagged_on_the_spread_chart(self):
+        from stats_core import run_test
+
+        data = _subgrouped(spread_at=18)
+        out = run_test("control_chart_xbar_s", data, {"values": "m", "subgroup": "batch"}, {})
+        rows = {row[0]: row[3] for row in out["tables"][0]["rows"]}
+        assert "B19" in rows
+        assert "S chart" in rows["B19"]
+
+    def test_charts_carry_both_panels_with_distinct_titles(self):
+        from stats_core import run_test
+
+        out = run_test("control_chart_xbar_r", _subgrouped(), {"values": "m", "subgroup": "batch"}, {})
+        titles = [p["title"] for p in out["plotSpecs"]]
+        assert "X-bar chart" in titles[0]
+        assert "Range chart" in titles[1]
+        assert len(out["plotSpecs"][0]["data"]["x"]) == 25
+
+    def test_large_subgroups_recommend_the_s_chart(self):
+        from stats_core import run_test
+
+        out = run_test(
+            "control_chart_xbar_r", _subgrouped(n_groups=12, size=10),
+            {"values": "m", "subgroup": "batch"}, {},
+        )
+        assert any("X-bar/S chart" in n for n in out["notes"])
+
+    def test_chunking_without_a_subgroup_column(self):
+        from stats_core import run_test
+
+        out = run_test(
+            "control_chart_xbar_r", _subgrouped(), {"values": "m"}, {"subgroup_size": 5},
+        )
+        assert out["statistic"]["subgroups"] == 25.0
+        assert out["statistic"]["subgroup_size"] == 5.0
+
+    def test_subgroup_column_cannot_be_the_measurement(self):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="must differ"):
+            run_test("control_chart_xbar_r", _subgrouped(), {"values": "m", "subgroup": "m"}, {})

@@ -537,6 +537,60 @@ REGISTRY: tuple[TestSpec, ...] = (
         ),
         min_n=2,
     ),
+    TestSpec(
+        "control_chart_xbar_r", "Control chart (X-bar & R)", "spc",
+        "For several measurements per time period. Plots subgroup means against "
+        "limits derived from the average range, with a companion range chart. "
+        "Sigma comes from within-subgroup spread, so drift between subgroups "
+        "cannot inflate the limits.",
+        spc.control_chart_xbar_r,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="Individual measurements, in process order."),
+            Role("subgroup", "Subgroup column (optional)", ANY, required=False,
+                 help="Which batch/hour/lot each measurement belongs to. Leave "
+                      "empty to chunk consecutive rows by the size below."),
+        ),
+        params=(
+            Param("subgroup_size", "Subgroup size (when no subgroup column)", "number", 5),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "Observations are in time order",
+            "Every subgroup holds the same number of observations",
+            "Subgroups are rational - variation within one is common cause only",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_xbar_s", "Control chart (X-bar & S)", "spc",
+        "As X-bar & R, but sigma is estimated from the subgroup standard "
+        "deviations rather than their ranges. Preferred from about n >= 9, where "
+        "the range starts wasting information.",
+        spc.control_chart_xbar_s,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="Individual measurements, in process order."),
+            Role("subgroup", "Subgroup column (optional)", ANY, required=False,
+                 help="Which batch/hour/lot each measurement belongs to. Leave "
+                      "empty to chunk consecutive rows by the size below."),
+        ),
+        params=(
+            Param("subgroup_size", "Subgroup size (when no subgroup column)", "number", 5),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "Observations are in time order",
+            "Every subgroup holds the same number of observations",
+        ),
+        min_n=4,
+    ),
 )
 
 _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}

@@ -38,6 +38,9 @@ COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend ./
 COPY scripts /app/scripts
+# DocsPage bundles these at build time; without them the build cannot resolve
+# its ?raw imports.
+COPY docs /app/docs
 COPY --from=wheel /opt/wheel /opt/wheel
 COPY --from=pyodide /opt/pyodide /opt/pyodide
 RUN mkdir -p public/pyodide-packages && cp /opt/wheel/*.whl public/pyodide-packages/

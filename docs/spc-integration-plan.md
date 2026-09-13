@@ -3,7 +3,7 @@
 Folding [`SPC-analysis`](https://github.com/jlleongarcia/SPC-analysis) into `stats-analysis`,
 after which the SPC repository is decommissioned.
 
-**Status:** Phases 1-3 + 5 done (Phase 3 runtime check outstanding) · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
+**Status:** Phases 1-3 + 5 done, Phase 4 started (Phase 3 runtime check outstanding) · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
 
 ---
 
@@ -267,23 +267,24 @@ Wire `spcStudies` into `deleteDataset`'s cascade transaction alongside `analyses
 
 **Gate:** the complete old five-page workflow is reproducible end-to-end, and a page refresh mid-study loses nothing (it never survived in Streamlit).
 
-### Phase 4 — Enhancements (each independently shippable)
+### Phase 4 — Enhancements (each independently shippable) — 1 of 6 done
 
 Ordered by value:
 
-1. **Charts beyond I-MR.** The old tool only handles n=1. With `constants.py` in place, X̄-R and X̄-S (subgrouped) and p / np / c / u (attribute) charts are incremental. Biggest single multiplier on the tool's reach.
+1. ✅ **X̄-R and X̄-S subgrouped charts** — `stats_core/spc/subgroups.py`, two registry entries, shared chart builder. Subgroups come from an explicit column or fixed-size chunking of consecutive rows. Ragged subgroups are refused with guidance rather than silently averaged, since the constants are defined per n; a partial trailing subgroup is dropped and reported. The means-chart limits use σ̂/√n and are pinned by test against both textbook shortcut factors (A2, A3). The spread chart is checked on **both** sides from n = 7, where D₃/B₃ become non-zero — an implausibly tight subgroup signals non-independent or massaged data. ⏳ Attribute charts (p, np, c, u) remain.
 2. **Selectable rule sets.** Four Oakland rules are hard-coded. Offer Nelson's 8 and Western Electric alongside them, chosen rather than baked in.
 3. **Non-normal capability.** Today `normality_check` warns and the analysis proceeds — but Cp/Cpk on skewed data are actively misleading. Add Box-Cox/Johnson transformation or the ISO 22514 percentile method. This is where the merge pays off concretely: SPC borrows `stats_core`'s normality machinery instead of duplicating it.
 4. **Confidence intervals on Cpk**, plus Cpm (Taguchi). Point estimates at n=30 imply far more precision than exists.
 5. **Phase II monitoring.** The old README called Phase I "the foundation step before deploying Phase II" — never built. With baselines persisted, applying frozen limits to incoming data is a natural next route.
 6. **Guided flow entry.** Add a `goal: "monitor_process"` branch to `guided/decisionTree.ts` routing to SPC.
 
-### Phase 5 — Documentation ✅ complete
+### Phase 5 — Documentation ✅ complete (including in-app)
 
 - ✅ `docs/spc-methodology.md` — ported and updated; §8 records all five deliberate deviations from the original tool.
 - ✅ `docs/spc-user-guide.md` — rewritten for the two front doors (Analyze entries, SPC Studio) rather than the old five Streamlit pages; ends with an explicit "not yet supported" list so the Phase 4 gaps are stated rather than discovered.
 - ✅ `README.md` — SPC section, module tree, and the `pyodide-runtime.json` manifest.
-- ⏳ In-app rendering of the docs stays deferred (decision 1 in §6).
+- ✅ **In-app docs at `/docs`** — the markdown under `docs/` is imported `?raw` and bundled, so the page and the repo cannot disagree and the docs work offline in an installed PWA. Needed `server.fs.allow` for dev and a `COPY docs` in the frontend image stage.
+- ✅ **Widened beyond SPC.** SPC is 4 of 47 tests and the docs were implying otherwise. Added `docs/getting-started.md` and `docs/statistical-methods.md` (all 14 families, with LaTeX formulas), plus a **generated test reference** built from the registry — so a new test documents itself and the reference can never drift from what the app does. KaTeX renders equations, bundled locally with its fonts so no CDN is involved.
 
 **Fidelity check.** The port was compared against the original implementation across 300
 randomised series — every control line, all four rules, the MR rules and the flagged-point list.

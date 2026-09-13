@@ -68,6 +68,9 @@ def _roles_for(test_id, ceras, fame, fame2, two_group_ceras, campaign_col):
         "classification_tree": (ceras, {"outcome": campaign_col, "predictors": num}, {}),
         "reliability_analysis": (ceras, {"columns": num[:4]}, {}),
         "control_chart_imr": (ceras, {"values": num[0]}, {}),
+        # 29 rows -> 9 complete subgroups of 3, enough for limits.
+        "control_chart_xbar_r": (ceras, {"values": num[0]}, {"subgroup_size": 3}),
+        "control_chart_xbar_s": (ceras, {"values": num[0]}, {"subgroup_size": 3}),
         "process_capability": (
             ceras,
             {"values": num[0]},

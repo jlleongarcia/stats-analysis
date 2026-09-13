@@ -182,6 +182,37 @@ def apply_mr_rules(
     return r1 | r2
 
 
+def apply_spread_rules(
+    spread: pd.Series,
+    ucl: float,
+    lcl: float,
+    uwl: "float | None" = None,
+    *,
+    rule2_k: int = 2,
+    rule2_window: int = 3,
+) -> pd.Series:
+    """Rules for a range or standard-deviation chart.
+
+    Unlike the moving-range chart, an R or S chart has a genuine lower limit
+    once the subgroup reaches n = 7 (D3 and B3 become non-zero). A point below
+    it is a real signal - subgroup spread that is *too* small usually means the
+    measurements are not independent, or the data has been rounded or massaged -
+    so this checks both sides rather than only the upper one.
+    """
+    high = (spread > ucl).fillna(False).astype(bool)
+    low = (spread < lcl).fillna(False).astype(bool) if lcl > 0 else pd.Series(
+        False, index=spread.index
+    )
+    fired = high | low
+    if uwl is not None:
+        zone = (spread > uwl).astype(float)
+        warn = (
+            (zone.rolling(rule2_window).sum() >= rule2_k) & (spread > uwl)
+        ).fillna(False).astype(bool)
+        fired = fired | warn
+    return fired
+
+
 def rules_fired(
     individual_violations: pd.DataFrame,
     mr_violations: pd.Series,

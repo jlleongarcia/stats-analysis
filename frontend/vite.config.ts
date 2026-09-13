@@ -42,7 +42,12 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
-  server: { port: 7100, strictPort: true },
+  server: {
+    port: 7100,
+    strictPort: true,
+    // DocsPage imports ../docs/*.md?raw, which lives outside the Vite root.
+    fs: { allow: [".."] },
+  },
   preview: { port: 7100, strictPort: true },
   plugins: [
     react(),

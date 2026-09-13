@@ -8,6 +8,7 @@ import { AnalyzePage } from "./pages/AnalyzePage";
 import { ExplorePage } from "./pages/ExplorePage";
 import { GuidedPage } from "./pages/GuidedPage";
 import { SpcPage } from "./pages/SpcPage";
+import { DocsPage } from "./pages/DocsPage";
 import { useApp } from "./state/store";
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
           <NavLink to="/analyze">Analyze</NavLink>
           <NavLink to="/explore">Explore</NavLink>
           <NavLink to="/spc">SPC</NavLink>
+          <NavLink to="/docs">Docs</NavLink>
         </nav>
         <div className="app__ctx">
           {active ? <span className="muted">{active.name}</span> : <span className="muted">no dataset</span>}
@@ -44,6 +46,7 @@ export default function App() {
           <Route path="/analyze" element={<AnalyzePage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/spc" element={<SpcPage />} />
+          <Route path="/docs" element={<DocsPage />} />
           <Route path="*" element={<Navigate to="/data" replace />} />
         </Routes>
         </ErrorBoundary>

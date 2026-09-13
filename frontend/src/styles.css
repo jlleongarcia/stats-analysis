@@ -268,3 +268,156 @@ select, input[type="number"], input[type="text"] {
   background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
   padding: .6rem .7rem; overflow-x: auto; font-size: .82rem; margin: .7rem 0;
 }
+
+.error-panel {
+  background: rgba(251, 113, 133, .08); border: 1px solid rgba(251, 113, 133, .3);
+  border-radius: var(--radius); padding: 1rem 1.1rem;
+}
+.error-panel h2 { margin: 0 0 .4rem; font-size: 1.1rem; }
+.error-panel pre {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: .6rem .7rem; overflow-x: auto; font-size: .82rem; margin: .7rem 0;
+}
+
+/* ---- in-app docs -------------------------------------------------------- */
+.docs__tabs { display: flex; gap: .4rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.docs__tab {
+  background: var(--panel); color: var(--muted); border: 1px solid var(--border);
+  border-radius: 8px; padding: .4rem .8rem; cursor: pointer; font: inherit; font-size: .9rem;
+}
+.docs__tab.is-active { background: var(--panel-2); color: var(--text); border-color: var(--accent); }
+
+.markdown {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1.2rem 1.4rem; max-width: 70ch; line-height: 1.65;
+}
+.markdown h1 { font-size: 1.5rem; margin: 0 0 .8rem; }
+.markdown h2 { font-size: 1.2rem; margin: 1.8rem 0 .6rem; border-bottom: 1px solid var(--border); padding-bottom: .3rem; }
+.markdown h3 { font-size: 1rem; margin: 1.3rem 0 .4rem; }
+.markdown p, .markdown li { color: var(--text); }
+.markdown code {
+  background: var(--panel-2); padding: .1rem .35rem; border-radius: 4px;
+  font-size: .87em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.markdown pre {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: .7rem .9rem; overflow-x: auto;
+}
+.markdown pre code { background: none; padding: 0; }
+.markdown table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .88rem; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: .4rem .6rem; text-align: left; }
+.markdown th { background: var(--panel-2); }
+.markdown blockquote {
+  margin: .8rem 0; padding: .5rem .9rem; border-left: 3px solid var(--accent);
+  background: var(--panel-2); color: var(--muted);
+}
+.markdown hr { border: none; border-top: 1px solid var(--border); margin: 1.6rem 0; }
+.markdown a { color: var(--accent); }
+.docs .table-scroll, .markdown table { display: block; overflow-x: auto; }
+
+/* ---- in-app docs -------------------------------------------------------- */
+.docs { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 1.6rem; align-items: start; }
+@media (max-width: 860px) { .docs { grid-template-columns: 1fr; } }
+
+.docs__nav { position: sticky; top: 1rem; display: flex; flex-direction: column; gap: 1.2rem; }
+.docs__group h3 {
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin: 0 0 .45rem;
+}
+.docs__group ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .1rem; }
+.docs__link {
+  display: block; width: 100%; text-align: left; background: none; border: none;
+  color: var(--muted); font: inherit; font-size: .9rem; cursor: pointer;
+  padding: .32rem .6rem; border-radius: 7px; border-left: 2px solid transparent;
+}
+.docs__link:hover { color: var(--text); background: var(--panel); }
+.docs__link.is-active { color: var(--text); background: var(--panel-2); border-left-color: var(--accent); }
+
+.docs__toc { border-top: 1px solid var(--border); padding-top: 1rem; }
+.docs__toc a {
+  display: block; color: var(--muted); text-decoration: none; font-size: .84rem;
+  padding: .22rem .6rem; border-left: 2px solid transparent; line-height: 1.35;
+}
+.docs__toc a:hover { color: var(--text); }
+.docs__toc a.is-active { color: var(--accent); border-left-color: var(--accent); }
+.docs__toc li.is-sub a { padding-left: 1.3rem; font-size: .8rem; }
+
+.docs__body { min-width: 0; }
+
+.markdown {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1.6rem 2rem; line-height: 1.7; max-width: 78ch;
+}
+.markdown > *:first-child { margin-top: 0; }
+.markdown h1 { font-size: 1.6rem; margin: 0 0 1rem; letter-spacing: -.01em; }
+.markdown h2 {
+  font-size: 1.22rem; margin: 2.2rem 0 .7rem;
+  border-bottom: 1px solid var(--border); padding-bottom: .35rem; scroll-margin-top: 1rem;
+}
+.markdown h3 { font-size: 1rem; margin: 1.5rem 0 .4rem; color: var(--accent); scroll-margin-top: 1rem; }
+.markdown h4 { font-size: .93rem; margin: 1.1rem 0 .3rem; }
+.markdown p { margin: .75rem 0; }
+.markdown ul, .markdown ol { margin: .6rem 0; padding-left: 1.3rem; }
+.markdown li { margin: .3rem 0; }
+.markdown strong { color: #f1f5f9; }
+.markdown code {
+  background: var(--panel-2); padding: .1rem .35rem; border-radius: 4px;
+  font-size: .86em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.markdown pre {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: .8rem 1rem; overflow-x: auto; font-size: .85rem; line-height: 1.5;
+}
+.markdown pre code { background: none; padding: 0; }
+.markdown table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .88rem; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: .45rem .7rem; text-align: left; vertical-align: top; }
+.markdown th { background: var(--panel-2); font-weight: 600; }
+.markdown blockquote {
+  margin: 1rem 0; padding: .6rem 1rem; border-left: 3px solid var(--accent);
+  background: var(--panel-2); color: var(--muted);
+}
+.markdown blockquote p { margin: .2rem 0; }
+.markdown hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.markdown a { color: var(--accent); }
+/* Wide content scrolls inside its own box; the page body never scrolls sideways. */
+.markdown table, .markdown .math-block { display: block; overflow-x: auto; max-width: 100%; }
+
+/* Equations ---------------------------------------------------------------- */
+.math-block {
+  margin: 1.1rem 0; padding: .9rem 1rem; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.math-block .katex-display { margin: 0; }
+/* KaTeX renders the formula twice: HTML for sight, MathML for screen readers.
+   katex.min.css hides the MathML copy, but any rule resetting `position` on
+   .markdown descendants would unhide it and show the formula twice. Re-assert
+   it here at higher specificity. */
+.markdown .katex .katex-mathml {
+  position: absolute; clip: rect(1px, 1px, 1px, 1px);
+  padding: 0; border: 0; height: 1px; width: 1px; overflow: hidden;
+}
+.katex { font-size: 1.04em; }
+.markdown .katex { color: var(--text); }
+
+/* Generated test reference ------------------------------------------------- */
+.testref { max-width: none; }
+.testref__search {
+  width: 100%; max-width: 26rem; margin: .4rem 0 1rem;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: .45rem .7rem; font: inherit;
+}
+.testref__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr)); gap: .8rem; }
+.testref__card {
+  background: var(--panel-2); border: 1px solid var(--border);
+  border-radius: 10px; padding: .85rem 1rem; scroll-margin-top: 1rem;
+}
+.testref__card header { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.testref__card h4 { margin: 0 0 .3rem; font-size: .97rem; }
+.testref__card p { margin: .2rem 0 .6rem; font-size: .87rem; color: var(--muted); }
+.testref__id { font-size: .72rem; color: var(--muted); background: none; white-space: nowrap; }
+.testref__meta { margin: 0; font-size: .83rem; display: grid; grid-template-columns: 6rem 1fr; gap: .25rem .7rem; }
+.testref__meta dt { color: var(--muted); text-transform: uppercase; font-size: .68rem; letter-spacing: .06em; padding-top: .15rem; }
+.testref__meta dd { margin: 0; }
+.testref__meta ul { margin: 0; padding-left: .95rem; }
+.testref__meta li { margin: .1rem 0; }
+.testref__help { font-size: .78rem; line-height: 1.4; }
