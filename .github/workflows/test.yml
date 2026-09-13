@@ -1,0 +1,52 @@
+name: Test
+
+# Reusable: exercises the two independent test suites (Python stats_core,
+# frontend typecheck) that both the PR-validation and publish workflows
+# gate on, without duplicating the steps in each caller.
+on:
+  workflow_call:
+
+jobs:
+  pytest:
+    name: pytest (stats_core)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.7.x"
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run pytest
+        run: uv run pytest
+
+  frontend-typecheck:
+    name: typecheck (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # tsc --noEmit alone: the full `npm run build` also needs the Python
+      # wheel and Pyodide runtime in place, which the Docker build validates
+      # separately. This job only needs to catch type errors fast.
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
