@@ -22,7 +22,10 @@ RUN mkdir -p /opt/wheel && cp /out/stats_analysis-*-py3-none-any.whl /opt/wheel/
 # ---------------------------------------------------------------------------
 FROM node:20-bookworm-slim AS pyodide
 WORKDIR /src
-COPY scripts/fetch-pyodide.mjs ./
+# The manifest travels with the script: it is resolved relative to the script's
+# own directory, and it is what decides which packages get vendored -- so adding
+# a package to it correctly invalidates this layer.
+COPY scripts/fetch-pyodide.mjs scripts/pyodide-runtime.json ./
 RUN node fetch-pyodide.mjs --out /opt/pyodide
 
 # ---------------------------------------------------------------------------

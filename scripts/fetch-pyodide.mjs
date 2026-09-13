@@ -2,9 +2,9 @@
  * Vendors the Pyodide runtime into the frontend so the app never contacts a CDN.
  *
  * Downloads only what this app actually boots: the core runtime files plus the
- * transitive dependency closure of micropip/numpy/pandas/scipy/statsmodels,
- * resolved from `pyodide-lock.json` (11 packages, ~40 MB -- the full Pyodide
- * distribution is several hundred MB, so the closure matters).
+ * transitive dependency closure of the packages in WANTED below, resolved from
+ * `pyodide-lock.json` (14 packages -- the full Pyodide distribution is several
+ * hundred MB, so the closure matters).
  *
  * Every download is verified against the sha256 in the lock file. Re-running is
  * cheap: files already present with a matching hash are skipped.
@@ -23,14 +23,20 @@ function arg(name, fallback) {
   return i !== -1 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-// Keep in sync with PYODIDE_VERSION in frontend/vite.config.ts.
-const VERSION = arg("version", process.env.PYODIDE_VERSION || "0.26.4");
+// Resolved next to this script, not from the repo root: the Docker build copies
+// the pair into a bare stage directory, where "../scripts" does not exist.
+const manifest = JSON.parse(
+  readFileSync(fileURLToPath(new URL("./pyodide-runtime.json", import.meta.url)), "utf8"),
+);
+
+const VERSION = arg("version", process.env.PYODIDE_VERSION || manifest.version);
 const OUT = resolve(arg("out", join(root, "frontend", "public", "pyodide")));
 const BASE = `https://cdn.jsdelivr.net/pyodide/v${VERSION}/full/`;
 
 // Loaded eagerly by the worker's `loadPackage` call; everything else these pull
-// in is resolved from the lock file below.
-const WANTED = ["micropip", "numpy", "pandas", "scipy", "statsmodels"];
+// in is resolved from the lock file below. The worker gets this same list
+// injected by vite.config.ts, so the two can no longer drift apart.
+const WANTED = manifest.packages;
 
 // The runtime itself. `pyodide-lock.json` must be present too: loadPyodide()
 // reads it from indexURL to resolve packages.

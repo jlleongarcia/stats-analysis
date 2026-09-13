@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 /**
- * Pyodide worker: boots CPython in WASM, installs numpy/pandas/scipy/statsmodels/
- * scikit-learn plus the local `stats_core` wheel, then dispatches `run_test` calls.
+ * Pyodide worker: boots CPython in WASM, loads the scientific packages listed in
+ * scripts/pyodide-runtime.json plus the local `stats_core` wheel, then
+ * dispatches `run_test` calls.
  *
  * All data crosses the boundary as JSON strings - this keeps the Python side
  * framework-free and avoids leaking PyProxy handles.
@@ -40,12 +41,18 @@ async function boot(wheelUrl: string, pyodideUrl: string): Promise<void> {
   const { loadPyodide } = await import(/* @vite-ignore */ `${pyodideUrl}pyodide.mjs`);
   pyodide = await loadPyodide({ indexURL: pyodideUrl });
 
+  // Injected from scripts/pyodide-runtime.json, which is also what
+  // scripts/fetch-pyodide.mjs vendors into public/pyodide/. Requesting a
+  // package that was never vendored fails the boot outright, by design: the app
+  // must never quietly fall back to a CDN.
   post({
     kind: "progress",
     stage: "Loading scientific packages",
-    detail: "numpy, pandas, scipy, statsmodels, scikit-learn",
+    // micropip is plumbing for installing our own wheel, not a package the user
+    // is waiting on, so it stays out of the status line.
+    detail: __PYODIDE_PACKAGES__.filter((p) => p !== "micropip").join(", "),
   });
-  await pyodide.loadPackage(["micropip", "numpy", "pandas", "scipy", "statsmodels", "scikit-learn"]);
+  await pyodide.loadPackage(__PYODIDE_PACKAGES__);
 
   post({ kind: "progress", stage: "Installing stats_core" });
   // deps=False: numpy/pandas/scipy/statsmodels are already loaded as native
