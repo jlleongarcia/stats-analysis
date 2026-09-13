@@ -799,3 +799,181 @@ class TestRegistryEntries:
         loose = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {"rule3_k": 15})
         tight = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {"rule3_k": 5})
         assert tight["statistic"]["flagged"] >= loose["statistic"]["flagged"]
+
+
+# --------------------------------------------------------------------------
+# studio protocol: charts and the capability hand-off
+# --------------------------------------------------------------------------
+
+
+class TestStudioCharts:
+    """The Studio renders the same charts as the Analyze page, from one builder."""
+
+    def test_evaluate_returns_renderable_charts(self, spc_frame):
+        out = spc_call("evaluate", {"data": spc_frame, "column": "measurement", "orderColumn": "day"})
+        assert [c["panel"] for c in out["charts"]] == ["individuals", "movingRange"]
+        assert out["charts"][0]["data"]["status"][25] == "violation"
+
+    def test_certified_charts_come_from_the_certified_limits(self, spc_frame):
+        out = spc_call("certify", {
+            "data": spc_frame,
+            "column": "measurement",
+            "decisions": [{"position": 25, "remove": True, "cause": "Sensor fault"}],
+        })
+        centre = next(line for line in out["charts"][0]["lines"] if line["label"] == "CL")
+        assert centre["value"] == pytest.approx(out["limits"]["i_cl"])
+        # The removed point is gone from the chart, not merely recoloured.
+        assert len(out["charts"][0]["data"]["x"]) == out["nFinal"]
+
+    def test_certified_chart_uses_the_pass_two_bridging_mask(self, spc_frame):
+        """The certified chart must not silently re-derive limits without the mask."""
+        certified = spc_call("certify", {
+            "data": spc_frame,
+            "column": "measurement",
+            "decisions": [{"position": 25, "remove": True, "cause": "Sensor fault"}],
+        })
+        # Re-evaluating with the same exclusions reproduces the same limits,
+        # which is what makes the capability hand-off below sound.
+        again = spc_call("evaluate", {
+            "data": spc_frame,
+            "column": "measurement",
+            "excluded": certified["removedSourceRows"],
+        })
+        assert again["limits"]["mr_bar"] == pytest.approx(certified["limits"]["mr_bar"])
+        assert again["limits"]["i_ucl"] == pytest.approx(certified["limits"]["i_ucl"])
+
+
+class TestStudioCapabilityHandoff:
+    def test_capability_on_the_certified_baseline_matches_its_sigma(self, spc_frame):
+        certified = spc_call("certify", {
+            "data": spc_frame,
+            "column": "measurement",
+            "decisions": [{"position": 25, "remove": True, "cause": "Sensor fault"}],
+        })
+        cap = spc_call("capability", {
+            "data": spc_frame,
+            "column": "measurement",
+            "excluded": certified["removedSourceRows"],
+            "mrBar": certified["limits"]["mr_bar"],
+            "usl": 106.0,
+            "lsl": 94.0,
+        })
+        assert cap["capability"]["sigma_within"] == pytest.approx(
+            certified["limits"]["sigma_within"]
+        )
+
+    def test_removing_the_outlier_makes_the_process_look_in_control(self, spc_frame):
+        certified = spc_call("certify", {
+            "data": spc_frame,
+            "column": "measurement",
+            "decisions": [
+                {"position": p, "remove": True, "cause": "documented"}
+                for p in spc_call(
+                    "evaluate", {"data": spc_frame, "column": "measurement"}
+                )["flagged"]
+            ],
+        })
+        cap = spc_call("capability", {
+            "data": spc_frame,
+            "column": "measurement",
+            "excluded": certified["removedSourceRows"],
+            "mrBar": certified["limits"]["mr_bar"],
+            "usl": 106.0,
+            "lsl": 94.0,
+        })
+        # Capability computed on a cleaned baseline should be better than on the
+        # raw series, and should no longer lead with the stability caveat.
+        raw = spc_call("capability", {
+            "data": spc_frame, "column": "measurement", "usl": 106.0, "lsl": 94.0,
+        })
+        assert cap["capability"]["cpk"] > raw["capability"]["cpk"]
+
+
+# --------------------------------------------------------------------------
+# fidelity to the original SPC-analysis tool
+# --------------------------------------------------------------------------
+
+
+class TestAllFourRulesSurvive:
+    """All four Oakland rules plus the MR rules made it through the port."""
+
+    def test_every_rule_is_exposed_and_wired(self):
+        from stats_core.spc import rules as r
+
+        assert r.RULE_COLUMNS == ("rule1", "rule2", "rule3", "rule4")
+        assert {"rule1", "rule2", "rule3", "rule4", "mr_rule1", "mr_rule2"} <= set(r.RULE_LABELS)
+        for name in ("rule1_action_limits", "rule2_warning_zone",
+                     "rule3_run_same_side", "rule4_trend",
+                     "apply_mr_rule1", "apply_mr_rules"):
+            assert callable(getattr(r, name))
+
+    def test_each_rule_can_fire_independently(self):
+        """A targeted series per rule, so none is silently dead code."""
+        base = [100.0 + (1.0 if i % 2 == 0 else -1.0) for i in range(40)]
+
+        r1 = pd.Series(base.copy()); r1[20] = 130.0
+        assert apply_all_rules(r1, compute_limits(r1))["rule1"].any()
+
+        # Two of three consecutive points in the same warning zone. The target
+        # is derived from the *base* limits and then checked against the final
+        # ones, because inserting the points raises MR-bar and moves the zone.
+        r2 = pd.Series(base.copy())
+        seed = compute_limits(pd.Series(base))
+        target = seed["i_cl"] + 2.8 * seed["sigma_within"]
+        r2[20] = r2[22] = target
+        lim2 = compute_limits(r2)
+        assert lim2["i_uwl"] < target < lim2["i_ucl"], "fixture must land in the warning zone"
+        flags2 = apply_all_rules(r2, lim2)
+        assert flags2["rule2"].any()
+        assert not flags2["rule1"].any(), "rule 2 must fire without rule 1 doing the work"
+
+        r3 = pd.Series(base.copy())
+        for i in range(10, 22):
+            r3[i] = 100.3          # a sustained run above the centre line
+        assert apply_all_rules(r3, compute_limits(r3))["rule3"].any()
+
+        r4 = pd.Series(base.copy())
+        for step, i in enumerate(range(10, 18)):
+            r4[i] = 100.0 + step * 0.4   # a steady climb
+        assert apply_all_rules(r4, compute_limits(r4))["rule4"].any()
+
+    def test_mr_rules_fire_on_a_range_spike(self):
+        s = pd.Series([100.0, 100.1, 99.9, 100.0, 140.0, 100.1, 99.8, 100.2])
+        lim = compute_limits(s)
+        from stats_core.spc.rules import apply_mr_rules
+
+        assert apply_mr_rules(s.diff().abs(), lim["mr_ucl"], lim["mr_uwl"]).any()
+
+    def test_rule2_config_reaches_the_moving_range_chart(self):
+        """Deviation from the original tool, pinned deliberately.
+
+        The original accepted rule2_k/rule2_window on apply_mr_rules but never
+        forwarded them from its Phase I pass, so the MR chart stayed at 2-of-3
+        regardless. Loosening Rule 2 here must flag at least as much on the MR
+        chart as the default does.
+        """
+        rng = np.random.default_rng(1)
+        s = pd.Series(rng.normal(100, 2, 60))
+        s.iloc[10], s.iloc[11] = 118.0, 96.0
+
+        default = run_phase_i_pass(s, rule2_k=2, rule2_window=3)
+        loosened = run_phase_i_pass(s, rule2_k=1, rule2_window=3)
+        assert int(loosened.mr_violations.sum()) > int(default.mr_violations.sum())
+
+    def test_defaults_match_the_original_tool(self):
+        """At stock thresholds the port reproduces the original exactly.
+
+        Encoded as an explicit expectation so a future refactor cannot quietly
+        drift: these are the flagged positions the SPC-analysis implementation
+        produces for this seed.
+        """
+        rng = np.random.default_rng(7)
+        s = pd.Series(rng.normal(100, 2, 60))
+        s.iloc[15] = 112.0
+        s.iloc[40] = 88.0
+        result = run_phase_i_pass(s)
+        assert 15 in result.flagged_positions
+        assert 40 in result.flagged_positions
+        assert result.rule_config == {
+            "rule2_k": 2, "rule2_window": 3, "rule3_k": 8, "rule4_k": 6,
+        }

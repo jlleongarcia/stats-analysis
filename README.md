@@ -3,8 +3,27 @@
 A Progressive Web App for statistical analysis of tabular data. Upload a CSV or
 Excel file and run descriptive statistics, normality tests, t-tests,
 non-parametric tests, ANOVA (one-way / Welch / two-way / repeated-measures /
-ANCOVA), correlation, regression, chi-square and variance tests — **entirely in
-your browser**. Nothing is uploaded to a server.
+ANCOVA), correlation, regression, chi-square, variance tests, multivariate
+methods and **statistical process control** — entirely in your browser. Nothing
+is uploaded to a server.
+
+## Statistical process control
+
+Everything else here is cross-sectional: compare these groups, model this
+relationship. SPC adds the axis none of it has — **time order**.
+
+- **Analyze → family `spc`** gives a one-shot I-MR control chart and a capability study (Cp, Cpk, Pp, Ppk), like any other test.
+- **The SPC Studio (`/spc`)** runs the Phase I workflow: the rules flag candidates, you rule on each one with a documented assignable cause, and a two-pass evaluation produces a certified baseline with an exportable audit trail. Studies persist on the device.
+
+A point is never removed automatically. A rule violation is a candidate for
+investigation, not proof of a special cause, and removing points without a
+documented process reason produces artificially tight limits — so the engine
+refuses a removal that carries no cause, independently of the UI.
+
+Folded in from the [SPC-analysis](https://github.com/jlleongarcia/SPC-analysis)
+project. See [docs/spc-user-guide.md](docs/spc-user-guide.md) to use it and
+[docs/spc-methodology.md](docs/spc-methodology.md) for the statistics, including
+the deliberate deviations from that original tool.
 
 ## How it works
 
@@ -22,9 +41,13 @@ frontend installs the very wheel that `pytest` validates.
 
 ```
 stats_core/          framework-free statistical implementations + registry
+stats_core/spc/      control charts, Phase I baselines, capability
 tests/               pytest suite (+ the sample .xls spreadsheets, gitignored)
 frontend/            the PWA
+docs/                SPC methodology, user guide, integration plan
 scripts/copy-wheel.mjs  builds/copies the stats_core wheel into the frontend
+scripts/pyodide-runtime.json  the single source of truth for the Pyodide version
+                        and package list (read by fetch-pyodide.mjs and vite.config.ts)
 Dockerfile              multi-stage: build wheel → build PWA → nginx
 docker-compose.yml      `web` (prod) and `dev` (Vite HMR) services
 ```

@@ -18,6 +18,16 @@ Rule 3 - Run
 Rule 4 - Trend
     ``k`` or more consecutive points steadily rising or falling (default 6).
 
+.. note:: Deliberate deviation from the original SPC-analysis tool
+
+   Rule 2's ``k`` and ``window`` are applied to **both** the individuals chart
+   and the moving-range chart. The original tool accepted those parameters on
+   :func:`apply_mr_rules` but never forwarded them from its Phase I pass, so the
+   MR chart silently stayed at 2-of-3 however the analyst configured Rule 2.
+   That looked like missing wiring rather than intent: the setting is presented
+   as one global threshold, and honouring it on one chart but not the other is
+   surprising. At the default 2-of-3 the two implementations agree exactly.
+
 .. note:: Flagging convention
 
    Run- and trend-based rules (3 and 4) flag the point that *completes* the

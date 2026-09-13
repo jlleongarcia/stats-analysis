@@ -19,6 +19,7 @@ import pandas as pd
 from stats_core._util import DataError
 from stats_core.results import ResultTable, TestResult
 from stats_core.spc.capability import compute_capability
+from stats_core.spc.charts import control_chart_specs
 from stats_core.spc.phase_i import control_lines_table, run_phase_i_pass
 from stats_core.spc.precheck import normality_precheck
 from stats_core.spc.rules import DEFAULT_RULE_CONFIG, RULE_LABELS, rules_fired
@@ -69,91 +70,6 @@ def _ordered_series(frame: pd.DataFrame, roles: dict) -> pd.Series:
 
 def _rule_params(params: dict) -> dict[str, int]:
     return {key: int(params.get(key, default)) for key, default in DEFAULT_RULE_CONFIG.items()}
-
-
-def _control_chart_specs(result, column: str) -> list[dict]:
-    """Build the two ``controlChart`` payloads: individuals, then moving range.
-
-    Two specs rather than one vertically concatenated pair, because Vega-Lite's
-    responsive ``width: "container"`` is not supported inside ``vconcat`` - and a
-    control chart that cannot fill its panel is worse than one that is not
-    pixel-aligned with the chart below it.
-
-    Which lines and shaded zones each panel carries is decided here rather than
-    in the renderer: it is SPC domain knowledge, and it is covered by tests.
-    """
-    labels = [str(label) for label in result.original_labels]
-    values = [float(v) for v in result.values]
-
-    statuses: list[str] = []
-    rule_text: list[str] = []
-    for position in range(result.n_original):
-        fired = rules_fired(result.individual_violations, result.mr_violations, position)
-        statuses.append("violation" if fired else "in control")
-        rule_text.append("; ".join(RULE_LABELS.get(name, name) for name in fired))
-
-    mr_labels: list[str] = []
-    mr_values: list[float] = []
-    mr_status: list[str] = []
-    for position in range(1, result.n_original):
-        mr_value = result.mr.iloc[position]
-        if pd.isna(mr_value):
-            continue
-        mr_labels.append(labels[position])
-        mr_values.append(float(mr_value))
-        mr_status.append(
-            "violation" if bool(result.mr_violations.iloc[position]) else "in control"
-        )
-
-    limits = result.limits
-    x_title = str(result.original_labels.name or "Observation")
-
-    def line(value: float, label: str, kind: str) -> dict:
-        return {"value": float(value), "label": label, "kind": kind}
-
-    def band(low: float, high: float, kind: str) -> dict:
-        return {"from": float(low), "to": float(high), "kind": kind}
-
-    individuals = {
-        "kind": "controlChart",
-        "panel": "individuals",
-        "title": f"Individuals chart - {column}",
-        "data": {"x": labels, "y": values, "status": statuses, "rules": rule_text},
-        "lines": [
-            line(limits["i_ucl"], "UAL", "action"),
-            line(limits["i_uwl"], "UWL", "warning"),
-            line(limits["i_cl"], "CL", "centre"),
-            line(limits["i_lwl"], "LWL", "warning"),
-            line(limits["i_lcl"], "LAL", "action"),
-        ],
-        # Only the 2-3 sigma warning zones are shaded. Shading the centre band
-        # too was tried and discarded: on a dark ground the two tints are barely
-        # tellable apart, so the second band added noise without adding meaning.
-        "bands": [
-            band(limits["i_uwl"], limits["i_ucl"], "warning"),
-            band(limits["i_lcl"], limits["i_lwl"], "warning"),
-        ],
-        "encoding": {"x": {"field": "x", "title": x_title}, "y": {"field": "y", "title": column}},
-    }
-
-    moving_range = {
-        "kind": "controlChart",
-        "panel": "movingRange",
-        "title": f"Moving range chart - {column}",
-        "data": {"x": mr_labels, "y": mr_values, "status": mr_status},
-        "lines": [
-            line(limits["mr_ucl"], "UAL", "action"),
-            line(limits["mr_uwl"], "UWL", "warning"),
-            line(limits["mr_cl"], "CL", "centre"),
-        ],
-        "bands": [band(limits["mr_uwl"], limits["mr_ucl"], "warning")],
-        "encoding": {
-            "x": {"field": "x", "title": x_title},
-            "y": {"field": "y", "title": "moving range"},
-        },
-    }
-
-    return [individuals, moving_range]
 
 
 def control_chart_imr(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
@@ -220,7 +136,7 @@ def control_chart_imr(frame: pd.DataFrame, roles: dict, params: dict) -> TestRes
                 rows=lines.to_dict(orient="split")["data"],
             )
         ],
-        plot_specs=_control_chart_specs(result, column),
+        plot_specs=control_chart_specs(result, column),
     )
 
     if violations.rows:

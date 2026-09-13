@@ -20,7 +20,7 @@ function post(msg: WorkerResponse) {
 
 const BOOTSTRAP = `
 import json
-from stats_core import run_test as _rt, get_registry as _gr
+from stats_core import run_test as _rt, get_registry as _gr, spc_call as _sc
 
 def _run(test_id, data_json, roles_json, params_json):
     return json.dumps(_rt(
@@ -32,6 +32,9 @@ def _run(test_id, data_json, roles_json, params_json):
 
 def _registry():
     return json.dumps(_gr())
+
+def _spc(fn, payload_json):
+    return json.dumps(_sc(fn, json.loads(payload_json)))
 `;
 
 async function boot(wheelUrl: string, pyodideUrl: string): Promise<void> {
@@ -108,6 +111,12 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     if (req.kind === "registry") {
       const json = pyodide.globals.get("_registry")();
       post({ kind: "registry", id: req.id, registry: JSON.parse(json) });
+      return;
+    }
+
+    if (req.kind === "spc") {
+      const json = pyodide.globals.get("_spc")(req.fn, JSON.stringify(req.payload));
+      post({ kind: "spc", id: req.id, result: JSON.parse(json) });
       return;
     }
 

@@ -23,6 +23,7 @@ from stats_core._util import DataError
 from stats_core.results import _clean
 from stats_core.spc.audit import AUDIT_COLUMNS, DecisionSet
 from stats_core.spc.capability import compute_capability
+from stats_core.spc.charts import control_chart_specs
 from stats_core.spc.crossflag import shared_removals
 from stats_core.spc.limits import bridging_mr_mask
 from stats_core.spc.phase_i import control_lines_table, finalise, run_phase_i_pass
@@ -176,6 +177,7 @@ def evaluate(payload: dict) -> dict:
             "nEvaluated": result.n_original,
             "nExcluded": len(excluded),
             "controlLines": _table(control_lines_table(result.limits)),
+            "charts": control_chart_specs(result, str(payload.get("column"))),
             "normality": normality_summary(normality_precheck(result.values)),
         }
     )
@@ -216,6 +218,7 @@ def certify(payload: dict) -> dict:
             "auditLog": _table(result.audit_log),
             "auditColumns": list(AUDIT_COLUMNS),
             "controlLines": _table(control_lines_table(result.final_limits)),
+            "charts": control_chart_specs(result.final_pass, str(payload.get("column"))),
             "verdicts": phase_i_verdicts(result),
             "normality": normality_summary(normality_precheck(result.final_values)),
         }

@@ -26,6 +26,23 @@ if (process.env.SKIP_WHEEL_BUILD) {
   const present = existsSync(outDir) && readdirSync(outDir).filter(isWheel);
   if (present && present.length) {
     console.log(`[copy-wheel] SKIP_WHEEL_BUILD set, wheel present (${present[0]}) - nothing to do`);
+    // There is no `uv` here to rebuild with, but staying silent about a stale
+    // wheel is how the browser ends up running last week's Python against
+    // today's UI - which surfaces as fields missing from engine responses
+    // rather than as anything that looks like a build problem.
+    const sources = join(root, "stats_core");
+    if (existsSync(sources)) {
+      const wheelMtime = statSync(join(outDir, present[0])).mtimeMs;
+      if (wheelMtime < newestSourceMtime()) {
+        console.warn(
+          `\n[copy-wheel] WARNING: ${present[0]} is OLDER than stats_core/.\n` +
+            "  The browser will install stale Python. This cannot be rebuilt here\n" +
+            "  (no uv in this image). Fix it with either:\n" +
+            "    host:   npm run sync-core        (rebuilds and copies the wheel)\n" +
+            "    docker: docker compose build     (rebuilds the wheel stage)\n",
+        );
+      }
+    }
     process.exit(0);
   }
   console.warn("[copy-wheel] SKIP_WHEEL_BUILD set but no stats_analysis wheel in", outDir);
@@ -41,9 +58,37 @@ function newestWheel() {
   return wheels[0]?.f ?? null;
 }
 
+/** Newest mtime across everything that ends up inside the wheel. */
+function newestSourceMtime() {
+  let newest = 0;
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "__pycache__") continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else newest = Math.max(newest, statSync(full).mtimeMs);
+    }
+  };
+  walk(join(root, "stats_core"));
+  for (const f of ["pyproject.toml", "README.md"]) {
+    const p = join(root, f);
+    if (existsSync(p)) newest = Math.max(newest, statSync(p).mtimeMs);
+  }
+  return newest;
+}
+
 let wheel = newestWheel();
-if (!wheel) {
-  console.log("[copy-wheel] no wheel in dist/ - building it with `uv build --wheel`");
+// A stale wheel is worse than a missing one: the version in pyproject rarely
+// changes, so the filename stays identical and the browser silently runs
+// yesterday's Python against today's UI. Rebuild whenever any source is newer.
+const stale =
+  wheel && statSync(join(distDir, wheel)).mtimeMs < newestSourceMtime();
+if (!wheel || stale) {
+  console.log(
+    stale
+      ? "[copy-wheel] stats_core changed since the wheel was built - rebuilding"
+      : "[copy-wheel] no wheel in dist/ - building it with `uv build --wheel`",
+  );
   execSync("uv build --wheel", { cwd: root, stdio: "inherit" });
   wheel = newestWheel();
 }

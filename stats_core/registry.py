@@ -8,6 +8,7 @@ execute one. Adding a test = importing its function and appending one
 
 from __future__ import annotations
 
+import sys
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
@@ -554,12 +555,36 @@ def get_spec(test_id: str) -> TestSpec:
         raise DataError(f"Unknown test id: {test_id!r}") from None
 
 
+def _engine_info() -> dict[str, Any]:
+    """What this build of stats_core actually contains.
+
+    Exists so a stale wheel is diagnosable from inside the app. The browser
+    caches the app shell and the Python wheel independently, and the wheel's
+    URL never changes (the version in pyproject is static), so it is entirely
+    possible to run today's UI against last week's engine. Without this, that
+    shows up as fields mysteriously missing from responses.
+    """
+    from stats_core import __version__
+
+    modules = sorted(
+        name.rsplit(".", 1)[-1]
+        for name in sys.modules
+        if name.startswith("stats_core.spc.")
+    )
+    return {
+        "version": __version__,
+        "testCount": len(REGISTRY),
+        "spcModules": modules,
+    }
+
+
 def get_registry() -> dict[str, Any]:
     """JSON-serializable description of every test, grouped by family."""
     return {
         "version": 1,
         "families": list(FAMILIES),
         "tests": [spec.to_dict() for spec in REGISTRY],
+        "engine": _engine_info(),
     }
 
 

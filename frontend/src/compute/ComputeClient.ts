@@ -62,7 +62,7 @@ export class ComputeClient {
       p.resolve(undefined);
     } else if (msg.kind === "registry") {
       p.resolve(msg.registry);
-    } else if (msg.kind === "result") {
+    } else if (msg.kind === "result" || msg.kind === "spc") {
       p.resolve(msg.result);
     }
   }
@@ -109,6 +109,12 @@ export class ComputeClient {
       roles,
       params,
     }));
+  }
+
+  /** Run one SPC Studio operation. See stats_core.spc.api for the payloads. */
+  async spc<T>(fn: string, payload: unknown): Promise<T> {
+    await this.init();
+    return this.request<T>((id) => ({ kind: "spc", id, fn, payload }));
   }
 
   terminate() {

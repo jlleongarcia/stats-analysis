@@ -211,3 +211,60 @@ select, input[type="number"], input[type="text"] {
   font-size: 13px; padding: 6px; cursor: pointer;
 }
 .pwa-toast__dismiss:hover { color: var(--text); }
+
+/* ---- SPC Studio --------------------------------------------------------- */
+.spc__head { margin-bottom: 1rem; }
+.spc-setup {
+  display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-end;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: .9rem 1rem; margin-bottom: 1rem;
+}
+.spc-rules-config { flex-basis: 100%; }
+.spc-rules-config summary { cursor: pointer; color: var(--muted); font-size: .9rem; }
+.spc-rules-grid { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .6rem; }
+.spc-rules-grid .field { width: 11rem; }
+
+.spc-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: 1rem;
+}
+.spc-panel h2 { margin: 0 0 .6rem; font-size: 1.1rem; }
+.spc-panel h3 { margin: 0 0 .4rem; font-size: 1rem; }
+
+.spc-decisions__head { margin-bottom: .7rem; }
+.spc-bulk { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: .8rem; }
+.spc-bulk input { flex: 1 1 22rem; }
+
+.spc-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.spc-table th, .spc-table td {
+  border-bottom: 1px solid var(--border); padding: .4rem .5rem; text-align: left;
+}
+.spc-table th { background: var(--panel-2); position: sticky; top: 0; white-space: nowrap; }
+.spc-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.spc-table input[type="text"] { width: 100%; }
+.spc-table tr.is-removing { background: rgba(251, 113, 133, .08); }
+.spc-rules { color: var(--muted); font-size: .82rem; }
+
+/* A removal without a cause is the one state the workflow must not let pass. */
+.input--needed { border-color: var(--warn) !important; }
+
+.spc-actions { display: flex; gap: .6rem; margin-top: .9rem; flex-wrap: wrap; }
+.spc-spec { display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-end; margin: .6rem 0; }
+.spc-spec .field { width: 15rem; }
+
+.ok-box {
+  background: rgba(52, 211, 153, .08); border: 1px solid rgba(52, 211, 153, .25);
+  padding: .6rem .8rem; border-radius: var(--radius);
+}
+.notes-list { margin: .6rem 0; padding-left: 1.1rem; color: var(--muted); font-size: .9rem; }
+.notes-list li { margin-bottom: .35rem; }
+
+.error-panel {
+  background: rgba(251, 113, 133, .08); border: 1px solid rgba(251, 113, 133, .3);
+  border-radius: var(--radius); padding: 1rem 1.1rem;
+}
+.error-panel h2 { margin: 0 0 .4rem; font-size: 1.1rem; }
+.error-panel pre {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+  padding: .6rem .7rem; overflow-x: auto; font-size: .82rem; margin: .7rem 0;
+}

@@ -3,7 +3,7 @@
 Folding [`SPC-analysis`](https://github.com/jlleongarcia/SPC-analysis) into `stats-analysis`,
 after which the SPC repository is decommissioned.
 
-**Status:** Phases 1-2 complete · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
+**Status:** Phases 1-3 + 5 done (Phase 3 runtime check outstanding) · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
 
 ---
 
@@ -194,9 +194,34 @@ leads with the out-of-control caveat when the data still shows violations (decis
 
 **Gate met:** both entries run end-to-end; charts verified by headless Vega render and visual inspection.
 
-### Phase 3 — SPC Studio (`/spc`)
+### Phase 3 — SPC Studio (`/spc`) ✅ built, runtime check outstanding
 
-The bulk of the work.
+99 SPC tests passing, `tsc` clean, production build green, decision-table guard rail verified by
+headless React render. **Not yet driven in a browser against a live engine** — see the gate below.
+
+| File | Role |
+|---|---|
+| `compute/protocol.ts`, `pyodide.worker.ts`, `ComputeClient.ts` | the generic `spc` channel + `client.spc(fn, payload)` |
+| `data/db.ts` | Dexie **v2**, `spcStudies` table, cascade delete with the dataset |
+| `state/spcStore.ts` | the workflow: `setup → review → certified` |
+| `pages/SpcPage.tsx` | the Studio, replacing all five old Streamlit pages |
+| `spc/DecisionTable.tsx` | per-point ruling; removal inert until a cause is typed |
+| `spc/AuditTrail.tsx` | decision log + CSV export |
+| `stats_core/spc/charts.py` | **new** — chart builder shared by Analyze and the Studio |
+
+Decisions made while building:
+
+- **The chart builder moved to `stats_core/spc/charts.py`**, shared by the registry entries and the Studio protocol, so both render from one tested implementation rather than two.
+- **`PhaseIResult` now carries `final_pass`** — the certified pass in `PassResult` form. Certified charts are drawn from the certified numbers instead of a recomputation that could quietly omit the pass-2 bridging mask.
+- **Capability hands off `mrBar` from the certified baseline**, so `sigma_within` matches the control chart exactly rather than being re-derived across the removal gaps. Pinned by a test.
+- **The assignable-cause rule is enforced twice**: the UI disables certification while any removal lacks a cause, and `finalise()` raises `AssignableCauseRequired` regardless. The UI check is a courtesy; the engine check is the guarantee.
+
+**Gate:** ⚠️ partially met. Python protocol verified end-to-end with real payloads; React layer
+typechecked, built, and its guard-rail component render-tested. Still to do: run the app with a
+booted Pyodide engine and walk a study through pass 1 → decisions → certify → capability → export,
+and confirm a mid-study page refresh loses nothing.
+
+Original scope notes:
 
 **Protocol.** Extend `compute/protocol.ts` with one generic message rather than one per operation:
 
@@ -253,11 +278,16 @@ Ordered by value:
 5. **Phase II monitoring.** The old README called Phase I "the foundation step before deploying Phase II" — never built. With baselines persisted, applying frozen limits to incoming data is a natural next route.
 6. **Guided flow entry.** Add a `goal: "monitor_process"` branch to `guided/decisionTree.ts` routing to SPC.
 
-### Phase 5 — Documentation
+### Phase 5 — Documentation ✅ complete
 
-- [ ] Port `methodology.md` and `user_guide.md` into `docs/`, updated for the new UI and any deviations documented in Phase 1.
-- [ ] Surface them in-app (the old app had a Documentation page; a `/docs` route or a help drawer).
-- [ ] Update the root `README.md`: SPC in the feature list, the architecture table, and the module tree.
+- ✅ `docs/spc-methodology.md` — ported and updated; §8 records all five deliberate deviations from the original tool.
+- ✅ `docs/spc-user-guide.md` — rewritten for the two front doors (Analyze entries, SPC Studio) rather than the old five Streamlit pages; ends with an explicit "not yet supported" list so the Phase 4 gaps are stated rather than discovered.
+- ✅ `README.md` — SPC section, module tree, and the `pyodide-runtime.json` manifest.
+- ⏳ In-app rendering of the docs stays deferred (decision 1 in §6).
+
+**Fidelity check.** The port was compared against the original implementation across 300
+randomised series — every control line, all four rules, the MR rules and the flagged-point list.
+**At default thresholds: zero mismatches.** The single divergence is deviation 1 below.
 
 ### Phase 6 — Decommission
 

@@ -90,6 +90,10 @@ class PhaseIResult:
     audit_log: pd.DataFrame
     n_passes: int
     final_pass_has_violations: bool
+    # The pass whose limits were certified, kept in PassResult form so charts
+    # are drawn from the certified numbers rather than a recomputation that
+    # could quietly diverge (the pass-2 bridging mask is easy to forget).
+    final_pass: "PassResult | None" = None
 
     @property
     def removal_rate(self) -> float:
@@ -203,6 +207,7 @@ def finalise(
             audit_log=audit_log,
             n_passes=1,
             final_pass_has_violations=first_pass.any_violations,
+            final_pass=first_pass,
         )
 
     # Remove by position in the *input* series: labels may repeat, positions
@@ -233,6 +238,7 @@ def finalise(
         audit_log=audit_log,
         n_passes=2,
         final_pass_has_violations=second_pass.any_violations,
+        final_pass=second_pass,
     )
 
 
