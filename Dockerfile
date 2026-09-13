@@ -22,7 +22,10 @@ RUN mkdir -p /opt/wheel && cp /out/stats_analysis-*-py3-none-any.whl /opt/wheel/
 # ---------------------------------------------------------------------------
 FROM node:20-bookworm-slim AS pyodide
 WORKDIR /src
-COPY scripts/fetch-pyodide.mjs ./
+# The manifest travels with the script: it is resolved relative to the script's
+# own directory, and it is what decides which packages get vendored -- so adding
+# a package to it correctly invalidates this layer.
+COPY scripts/fetch-pyodide.mjs scripts/pyodide-runtime.json ./
 RUN node fetch-pyodide.mjs --out /opt/pyodide
 
 # ---------------------------------------------------------------------------
@@ -35,6 +38,9 @@ COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend ./
 COPY scripts /app/scripts
+# DocsPage bundles these at build time; without them the build cannot resolve
+# its ?raw imports.
+COPY docs /app/docs
 COPY --from=wheel /opt/wheel /opt/wheel
 COPY --from=pyodide /opt/pyodide /opt/pyodide
 RUN mkdir -p public/pyodide-packages && cp /opt/wheel/*.whl public/pyodide-packages/

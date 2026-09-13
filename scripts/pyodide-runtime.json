@@ -1,0 +1,12 @@
+{
+  "$comment": "Single source of truth for the Pyodide runtime. Read by scripts/fetch-pyodide.mjs (which vendors it) and by frontend/vite.config.ts (which injects it into the worker and keys the service-worker cache). Never hard-code these anywhere else: a package requested at boot but missing from this list is not vendored, and the engine fails to start rather than silently reaching a CDN.",
+  "version": "0.26.4",
+  "packages": [
+    "micropip",
+    "numpy",
+    "pandas",
+    "scipy",
+    "statsmodels",
+    "scikit-learn"
+  ]
+}

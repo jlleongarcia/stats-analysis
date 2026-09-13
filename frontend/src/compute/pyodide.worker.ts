@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 /**
- * Pyodide worker: boots CPython in WASM, installs numpy/pandas/scipy/statsmodels/
- * scikit-learn plus the local `stats_core` wheel, then dispatches `run_test` calls.
+ * Pyodide worker: boots CPython in WASM, loads the scientific packages listed in
+ * scripts/pyodide-runtime.json plus the local `stats_core` wheel, then
+ * dispatches `run_test` calls.
  *
  * All data crosses the boundary as JSON strings - this keeps the Python side
  * framework-free and avoids leaking PyProxy handles.
@@ -19,7 +20,7 @@ function post(msg: WorkerResponse) {
 
 const BOOTSTRAP = `
 import json
-from stats_core import run_test as _rt, get_registry as _gr
+from stats_core import run_test as _rt, get_registry as _gr, spc_call as _sc
 
 def _run(test_id, data_json, roles_json, params_json):
     return json.dumps(_rt(
@@ -31,6 +32,9 @@ def _run(test_id, data_json, roles_json, params_json):
 
 def _registry():
     return json.dumps(_gr())
+
+def _spc(fn, payload_json):
+    return json.dumps(_sc(fn, json.loads(payload_json)))
 `;
 
 async function boot(wheelUrl: string, pyodideUrl: string): Promise<void> {
@@ -40,12 +44,18 @@ async function boot(wheelUrl: string, pyodideUrl: string): Promise<void> {
   const { loadPyodide } = await import(/* @vite-ignore */ `${pyodideUrl}pyodide.mjs`);
   pyodide = await loadPyodide({ indexURL: pyodideUrl });
 
+  // Injected from scripts/pyodide-runtime.json, which is also what
+  // scripts/fetch-pyodide.mjs vendors into public/pyodide/. Requesting a
+  // package that was never vendored fails the boot outright, by design: the app
+  // must never quietly fall back to a CDN.
   post({
     kind: "progress",
     stage: "Loading scientific packages",
-    detail: "numpy, pandas, scipy, statsmodels, scikit-learn",
+    // micropip is plumbing for installing our own wheel, not a package the user
+    // is waiting on, so it stays out of the status line.
+    detail: __PYODIDE_PACKAGES__.filter((p) => p !== "micropip").join(", "),
   });
-  await pyodide.loadPackage(["micropip", "numpy", "pandas", "scipy", "statsmodels", "scikit-learn"]);
+  await pyodide.loadPackage(__PYODIDE_PACKAGES__);
 
   post({ kind: "progress", stage: "Installing stats_core" });
   // deps=False: numpy/pandas/scipy/statsmodels are already loaded as native
@@ -101,6 +111,12 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
     if (req.kind === "registry") {
       const json = pyodide.globals.get("_registry")();
       post({ kind: "registry", id: req.id, registry: JSON.parse(json) });
+      return;
+    }
+
+    if (req.kind === "spc") {
+      const json = pyodide.globals.get("_spc")(req.fn, JSON.stringify(req.payload));
+      post({ kind: "spc", id: req.id, result: JSON.parse(json) });
       return;
     }
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from stats_core.results import AssumptionCheck, EffectSize, ResultTable, TestResult
 from stats_core.registry import REGISTRY, Role, TestSpec, get_registry, get_spec, run_test
+from stats_core.spc.api import spc_call
 
 __all__ = [
     "AssumptionCheck",
@@ -23,6 +24,7 @@ __all__ = [
     "get_registry",
     "get_spec",
     "run_test",
+    "spc_call",
 ]
 
 __version__ = "0.1.0"

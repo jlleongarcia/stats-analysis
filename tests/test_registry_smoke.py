@@ -67,6 +67,25 @@ def _roles_for(test_id, ceras, fame, fame2, two_group_ceras, campaign_col):
         ),
         "classification_tree": (ceras, {"outcome": campaign_col, "predictors": num}, {}),
         "reliability_analysis": (ceras, {"columns": num[:4]}, {}),
+        "control_chart_imr": (ceras, {"values": num[0]}, {}),
+        # 29 rows -> 9 complete subgroups of 3, enough for limits.
+        "control_chart_xbar_r": (ceras, {"values": num[0]}, {"subgroup_size": 3}),
+        "control_chart_xbar_s": (ceras, {"values": num[0]}, {"subgroup_size": 3}),
+        "control_chart_p": (None, None, None),   # needs count + size columns; own module
+        "control_chart_np": (None, None, None),
+        "control_chart_c": (None, None, None),
+        "control_chart_u": (None, None, None),
+        "control_chart_phase_ii": (None, None, None),  # needs baseline params; own module
+        "process_capability": (
+            ceras,
+            {"values": num[0]},
+            # Spec limits straddling the observed spread, so the indices are
+            # finite and the test exercises the real arithmetic.
+            {
+                "usl": float(ceras[num[0]].mean() + 3 * ceras[num[0]].std()),
+                "lsl": float(ceras[num[0]].mean() - 3 * ceras[num[0]].std()),
+            },
+        ),
     }
     return table[test_id]
 

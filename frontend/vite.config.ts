@@ -1,8 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+
+// The Pyodide runtime manifest, shared with scripts/fetch-pyodide.mjs so that
+// what the worker asks loadPackage for is exactly what got vendored. Injecting
+// it rather than importing it keeps the worker free of a cross-root import.
+const pyodideRuntime: { version: string; packages: string[] } = JSON.parse(
+  readFileSync(fileURLToPath(new URL("../scripts/pyodide-runtime.json", import.meta.url)), "utf8"),
+);
+
+if (!Array.isArray(pyodideRuntime.packages) || pyodideRuntime.packages.length === 0) {
+  throw new Error("scripts/pyodide-runtime.json lists no packages.");
+}
 
 // The wheel carries its full PEP 427 filename (micropip refuses anything else),
 // so the name changes with every version bump. Resolve it once here rather than
@@ -22,9 +33,7 @@ function statsCoreWheel(): string {
 
 const STATS_CORE_WHEEL = statsCoreWheel();
 
-// Keep in sync with the default in scripts/fetch-pyodide.mjs, which vendors
-// this exact release into public/pyodide/.
-const PYODIDE_VERSION = "0.26.4";
+const PYODIDE_VERSION = pyodideRuntime.version;
 
 export default defineConfig({
   base: "./",
@@ -33,7 +42,12 @@ export default defineConfig({
     target: "es2022",
     sourcemap: true,
   },
-  server: { port: 7100, strictPort: true },
+  server: {
+    port: 7100,
+    strictPort: true,
+    // DocsPage imports ../docs/*.md?raw, which lives outside the Vite root.
+    fs: { allow: [".."] },
+  },
   preview: { port: 7100, strictPort: true },
   plugins: [
     react(),
@@ -108,5 +122,6 @@ export default defineConfig({
   ],
   define: {
     __STATS_CORE_WHEEL__: JSON.stringify(STATS_CORE_WHEEL),
+    __PYODIDE_PACKAGES__: JSON.stringify(pyodideRuntime.packages),
   },
 });

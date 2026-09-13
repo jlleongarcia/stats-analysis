@@ -8,6 +8,7 @@ execute one. Adding a test = importing its function and appending one
 
 from __future__ import annotations
 
+import sys
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
@@ -19,6 +20,7 @@ from stats_core import location_tests as loc
 from stats_core import multivariate as mv
 from stats_core import nonparametric as npar
 from stats_core import normality, regression, reliability, variance_tests
+from stats_core.spc import entries as spc
 from stats_core._util import DataError
 from stats_core.results import TestResult
 
@@ -487,6 +489,211 @@ REGISTRY: tuple[TestSpec, ...] = (
         reliability.reliability_analysis,
         roles=(Role("columns", "Items (>= 3 numeric columns)", NUMERIC, multiple=True),),
     ),
+    # ---- statistical process control ---------------------------------------
+    TestSpec(
+        "control_chart_imr", "Control chart (Individuals & Moving Range)", "spc",
+        "Plots measurements in the order they were taken against control limits "
+        "derived from the average moving range, flagging points that violate the "
+        "Shewhart rules. Row order is the time axis.",
+        spc.control_chart_imr,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="One numeric measurement per observation, in process order."),
+            Role("order", "Observation label (optional)", ANY, required=False,
+                 help="Date, batch or sample ID for the x axis. Used as a label "
+                       "only - the chart never re-sorts your rows."),
+        ),
+        params=(
+            Param("rule_set", "Rule set", "select", "oakland",
+                  ("oakland", "weco", "nelson"),
+                  "oakland: the configurable four below. weco: Western Electric's "
+                  "four zone tests. nelson: Nelson's eight - more sensitive, and "
+                  "more false alarms."),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "Observations are in time order",
+            "Measurements are approximately normal",
+            "Observations are independent",
+        ),
+        min_n=2,
+    ),
+    TestSpec(
+        "process_capability", "Process capability (Cp, Cpk, Pp, Ppk)", "spc",
+        "Compares the process spread against specification limits. Cp/Cpk use the "
+        "short-term (within) sigma from the moving range; Pp/Ppk use the long-term "
+        "sample sigma. Only meaningful for a process in statistical control.",
+        spc.process_capability,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="One numeric measurement per observation, in process order."),
+            Role("order", "Observation label (optional)", ANY, required=False),
+        ),
+        params=(
+            Param("usl", "Upper specification limit (USL)", "number", None),
+            Param("lsl", "Lower specification limit (LSL)", "number", None),
+            Param("target", "Target value (optional, enables Cpm)", "number", None),
+            Param("method", "Method for non-normal data", "select", "normal",
+                  ("normal", "percentile", "boxcox"),
+                  "normal assumes a normal distribution; percentile is ISO 22514-2 "
+                  "and distribution-free; boxcox reports a normalising transform."),
+        ),
+        assumptions=(
+            "Process is in statistical control",
+            "Measurements are approximately normal",
+        ),
+        min_n=2,
+    ),
+    TestSpec(
+        "control_chart_xbar_r", "Control chart (X-bar & R)", "spc",
+        "For several measurements per time period. Plots subgroup means against "
+        "limits derived from the average range, with a companion range chart. "
+        "Sigma comes from within-subgroup spread, so drift between subgroups "
+        "cannot inflate the limits.",
+        spc.control_chart_xbar_r,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="Individual measurements, in process order."),
+            Role("subgroup", "Subgroup column (optional)", ANY, required=False,
+                 help="Which batch/hour/lot each measurement belongs to. Leave "
+                      "empty to chunk consecutive rows by the size below."),
+        ),
+        params=(
+            Param("subgroup_size", "Subgroup size (when no subgroup column)", "number", 5),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "Observations are in time order",
+            "Every subgroup holds the same number of observations",
+            "Subgroups are rational - variation within one is common cause only",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_xbar_s", "Control chart (X-bar & S)", "spc",
+        "As X-bar & R, but sigma is estimated from the subgroup standard "
+        "deviations rather than their ranges. Preferred from about n >= 9, where "
+        "the range starts wasting information.",
+        spc.control_chart_xbar_s,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="Individual measurements, in process order."),
+            Role("subgroup", "Subgroup column (optional)", ANY, required=False,
+                 help="Which batch/hour/lot each measurement belongs to. Leave "
+                      "empty to chunk consecutive rows by the size below."),
+        ),
+        params=(
+            Param("subgroup_size", "Subgroup size (when no subgroup column)", "number", 5),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "Observations are in time order",
+            "Every subgroup holds the same number of observations",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_p", "Attribute chart (p - proportion defective)", "spc",
+        "Plots the fraction of units that were defective in each sample. Limits follow the sample size, so a small sample is not held to the same precision as a large one.",
+        spc.control_chart_p,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("size", "Sample size", NUMERIC,
+                 help="How many units were inspected in each sample."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Each unit is pass/fail, and failures are independent",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_np", "Attribute chart (np - number defective)", "spc",
+        "Plots the raw count of defective units. Requires a constant sample size; use a p chart when it varies.",
+        spc.control_chart_np,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("size", "Sample size", NUMERIC,
+                 help="How many units were inspected in each sample."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Each unit is pass/fail, and failures are independent",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_c", "Attribute chart (c - defect count)", "spc",
+        "Plots the number of defects found per inspection unit, where every unit offers the same opportunity for defects.",
+        spc.control_chart_c,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Defects occur independently at a constant rate",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_u", "Attribute chart (u - defects per unit)", "spc",
+        "Plots defects per unit when the amount inspected varies between samples - metres of cable, hours of running, batches of parts.",
+        spc.control_chart_u,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("size", "Sample size", NUMERIC,
+                 help="How many units were inspected in each sample."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Defects occur independently at a constant rate",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_phase_ii", "Phase II monitoring (frozen baseline)", "spc",
+        "Plots new observations against control limits from a certified Phase I "
+        "baseline. The limits are supplied, never recomputed - a drifted process "
+        "must not be allowed to redraw its own limits and look stable.",
+        spc.control_chart_phase_ii,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="New observations to monitor, in process order."),
+            Role("order", "Observation label (optional)", ANY, required=False),
+        ),
+        params=(
+            Param("center", "Baseline centre line", "number", None),
+            Param("sigma_within", "Baseline sigma (within)", "number", None),
+            Param("rule_set", "Rule set", "select", "oakland",
+                  ("oakland", "weco", "nelson")),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "The baseline came from a certified Phase I study",
+            "The measurement and conditions match that baseline",
+        ),
+        min_n=1,
+    ),
 )
 
 _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}
@@ -494,7 +701,7 @@ _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}
 FAMILIES: tuple[str, ...] = (
     "descriptive", "normality", "t-test", "nonparametric",
     "anova", "correlation", "regression", "categorical", "variance",
-    "multivariate", "clustering", "classification", "reliability",
+    "multivariate", "clustering", "classification", "reliability", "spc",
 )
 
 
@@ -505,12 +712,36 @@ def get_spec(test_id: str) -> TestSpec:
         raise DataError(f"Unknown test id: {test_id!r}") from None
 
 
+def _engine_info() -> dict[str, Any]:
+    """What this build of stats_core actually contains.
+
+    Exists so a stale wheel is diagnosable from inside the app. The browser
+    caches the app shell and the Python wheel independently, and the wheel's
+    URL never changes (the version in pyproject is static), so it is entirely
+    possible to run today's UI against last week's engine. Without this, that
+    shows up as fields mysteriously missing from responses.
+    """
+    from stats_core import __version__
+
+    modules = sorted(
+        name.rsplit(".", 1)[-1]
+        for name in sys.modules
+        if name.startswith("stats_core.spc.")
+    )
+    return {
+        "version": __version__,
+        "testCount": len(REGISTRY),
+        "spcModules": modules,
+    }
+
+
 def get_registry() -> dict[str, Any]:
     """JSON-serializable description of every test, grouped by family."""
     return {
         "version": 1,
         "families": list(FAMILIES),
         "tests": [spec.to_dict() for spec in REGISTRY],
+        "engine": _engine_info(),
     }
 
 
