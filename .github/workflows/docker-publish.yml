@@ -1,0 +1,137 @@
+name: Publish Docker image
+
+# Builds and publishes the multi-arch production image (linux/amd64 +
+# linux/arm64) to GHCR on every push to main. Gated on the same test suite
+# as CI, then smoke-tested offline before the run is considered green.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build-and-push:
+    name: Build and push (linux/amd64, linux/arm64)
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.name }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # GHCR requires a lowercase image path; github.repository can carry
+      # uppercase if the repo or owner name does.
+      - name: Compute lowercase image name
+        id: image
+        run: echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags and labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=build
+          cache-to: type=gha,scope=build,mode=max
+
+  smoke-test:
+    name: Offline smoke test
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Log in to ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Pulls the just-pushed manifest list; the amd64 runner resolves it to
+      # the matching platform image automatically.
+      - name: Pull image
+        run: docker pull "${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+          DIGEST: ${{ needs.build-and-push.outputs.digest }}
+
+      # The whole point of vendoring Pyodide into the image is that the PWA
+      # never needs to reach a CDN at runtime. Prove it here: no network at
+      # all, not even DNS, and the app must still be served.
+      - name: Run with --network none and verify it serves
+        run: |
+          docker run -d --name smoke --network none "${IMAGE}@${DIGEST}"
+
+          ready=""
+          for _ in $(seq 1 15); do
+            if docker exec smoke wget -qO /tmp/smoke.html http://127.0.0.1/ 2>/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ -z "$ready" ]; then
+            echo "::error::Container never answered on 127.0.0.1 inside --network none"
+            docker logs smoke
+            exit 1
+          fi
+
+          docker cp smoke:/tmp/smoke.html ./smoke.html
+          if ! grep -qi "<html" ./smoke.html; then
+            echo "::error::Response did not look like the app's HTML shell"
+            cat ./smoke.html
+            exit 1
+          fi
+
+          echo "Offline smoke test passed: served $(wc -c < ./smoke.html) bytes with no network access."
+        env:
+          IMAGE: ${{ needs.build-and-push.outputs.image }}
+          DIGEST: ${{ needs.build-and-push.outputs.digest }}
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f smoke 2>/dev/null || true

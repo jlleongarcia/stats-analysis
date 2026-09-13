@@ -1,0 +1,47 @@
+name: CI
+
+# Fast feedback for pull requests: run the test suites, then confirm the
+# multi-arch image still builds cleanly (no push). This shares its Buildx
+# cache scope with docker-publish.yml, so a merge into main reuses layers
+# already warmed here instead of rebuilding from scratch.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  docker-build-validate:
+    name: Validate Docker build (linux/amd64, linux/arm64)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # push:false and no `load`: buildx builds and discards the output.
+      # That's enough to prove both platforms compile; it can't be loaded
+      # locally anyway since `docker load` doesn't accept multi-platform
+      # images.
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: false
+          cache-from: type=gha,scope=build
+          cache-to: type=gha,scope=build,mode=max

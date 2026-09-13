@@ -50,6 +50,7 @@ scripts/pyodide-runtime.json  the single source of truth for the Pyodide version
                         and package list (read by fetch-pyodide.mjs and vite.config.ts)
 Dockerfile              multi-stage: build wheel → build PWA → nginx
 docker-compose.yml      `web` (prod) and `dev` (Vite HMR) services
+.github/workflows/      CI (PR checks) + multi-arch image publish to GHCR
 ```
 
 ## Quick start
@@ -60,6 +61,35 @@ docker-compose.yml      `web` (prod) and `dev` (Vite HMR) services
 docker compose up web                 # http://localhost:7100  (production build)
 docker compose --profile dev up dev   # http://localhost:7100  (Vite + HMR)
 ```
+
+### CI/CD (GitHub Actions)
+
+- **`.github/workflows/ci.yml`** — on every pull request into `main`: runs
+  `pytest` + frontend typecheck, then validates the Docker image builds for
+  both `linux/amd64` and `linux/arm64` (build only, nothing pushed).
+- **`.github/workflows/docker-publish.yml`** — on every push to `main`: runs
+  the same tests, then builds and pushes the `runtime` stage as a multi-arch
+  image to `ghcr.io/jlleongarcia/stats-analysis`, tagged `latest` and
+  `sha-<short-sha>`. A final job pulls the pushed image and runs it with
+  `docker run --network none` to confirm the PWA still serves itself with
+  zero network access, before the run is considered green.
+- Both workflows share a `test.yml` reusable workflow and a Buildx GHA cache
+  scope, so a PR's build cache is already warm by the time it merges.
+
+One-time repo setting: GHCR pushes use the built-in `GITHUB_TOKEN`, which
+needs write access to packages. If **Settings → Actions → General →
+Workflow permissions** is set to "Read repository contents permission"
+(the GitHub default for new repos), switch it to "Read and write
+permissions" or `docker-publish.yml` will fail to push with a 403.
+
+```bash
+docker pull ghcr.io/jlleongarcia/stats-analysis:latest
+docker run -p 7100:80 ghcr.io/jlleongarcia/stats-analysis:latest
+```
+
+The first push publishes the package as private under the repo owner's GHCR
+packages; make it public from the package's GitHub settings if you want
+anonymous `docker pull` to work.
 
 ### Local (development only)
 
