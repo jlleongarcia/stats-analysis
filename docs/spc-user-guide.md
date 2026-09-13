@@ -62,6 +62,11 @@ Below about 20 retained points the app marks the baseline provisional.
 | One measurement per period | **Individuals & Moving Range** |
 | Several per period, subgroup $n \le 8$ | **$\bar{X}$ & $R$** |
 | Several per period, subgroup $n \ge 9$ | **$\bar{X}$ & $S$** |
+| Fraction defective, sample size may vary | **p** |
+| Number defective, constant sample size | **np** |
+| Defect count, one fixed unit | **c** |
+| Defects per unit, inspected amount varies | **u** |
+| Checking new data against an established baseline | **Phase II monitoring** |
 
 Subgrouping is worth it when you have it: the within-subgroup spread estimates sigma directly, so
 drift *between* subgroups cannot inflate the limits, and averaging tightens the limits by a factor
@@ -197,11 +202,80 @@ but the caveat is there for a reason.
 
 ---
 
-## Not yet supported
+## Attribute charts
 
-- Attribute charts (p, np, c, u) for defect counts
-- Nelson's 8 and Western Electric rule sets — the four Oakland rules are implemented and configurable
-- Non-normal capability (Box-Cox / ISO 22514 percentile methods)
-- Confidence intervals on Cpk, and Cpm
-- Phase II monitoring against a frozen baseline
-- Multi-variable studies with cross-variable flagging — the engine supports it; the Studio UI is single-variable
+For counts rather than measurements — how many units failed, how many defects were found.
+
+| Chart | Plots | Needs |
+|---|---|---|
+| **p** | proportion defective | count + sample size (size may vary) |
+| **np** | number defective | count + sample size (constant size only) |
+| **c** | defect count | count only, one unit per sample |
+| **u** | defects per unit | count + inspected amount (may vary) |
+
+Getting **defective vs defect** right matters: a *defective* is a failed unit (binomial — p, np);
+a *defect* is one fault, and a unit can carry several (Poisson — c, u). The wrong choice gives
+limits that are wrong in a way no amount of data reveals.
+
+Where the sample size varies, so do the limits — a proportion from 1000 units is far better
+determined than one from 20. The p and u charts draw this as a **stepped boundary** rather than a
+flat line, so the varying precision is visible rather than hidden.
+
+Below an expected count of about 5 per sample, the app warns that the underlying normal
+approximation is weak and the lower limit may sit at zero — meaning the chart can then only ever
+signal an *increase*.
+
+---
+
+## Choosing a rule set
+
+Every chart offers three rule sets, all built on the same zone decomposition (within 1σ, 1–2σ,
+2–3σ, beyond 3σ):
+
+| Set | Rules | Character |
+|---|---|---|
+| **Oakland** (default) | 4, with configurable thresholds | What this app has always used |
+| **Western Electric** | 4, fixed | The 1956 classic: beyond 3σ, 2-of-3 beyond 2σ, 4-of-5 beyond 1σ, a run of 8 |
+| **Nelson** | 8, fixed | Adds trend, alternation, stratification and mixture detection |
+
+More rules catch real shifts sooner **and** raise the false-alarm rate — running all eight Nelson
+rules on a genuinely stable process signals roughly once every 90 points by chance alone. Pick the
+set your organisation standardises on, not the one that flags the most.
+
+---
+
+## Non-normal and off-target capability
+
+If the normality pre-check fails, the capability entry offers two honest alternatives to the
+standard Cp/Cpk formulas, chosen via **Method**:
+
+- **Percentile (ISO 22514-2)** — reads the 0.135th and 99.865th percentiles directly from the data instead of assuming a normal shape. No distributional assumption, but a percentile that far into the tail is inherently noisy with only a few dozen points.
+- **Box-Cox** — reports a power transform that improves normality, so you can judge whether transforming and re-running the standard indices is worthwhile.
+
+Two further numbers, always available:
+
+- **Cpk's 95% confidence interval** — a reminder that a point estimate from a modest sample carries real uncertainty. A reported Cpk of 1.33 at n = 30 is compatible with anything from roughly 1.0 to 1.7.
+- **Cpm** — set a **Target**, and this index penalises being off-nominal even while inside spec. Matters most where tolerances stack, as in assembly.
+
+---
+
+## Phase II: monitoring against a frozen baseline
+
+Once you have a certified baseline, **Phase II monitoring** (on the Analyze page) checks new data
+against it — the different question from Phase I. Phase I asks *was this process stable, and what
+are its limits?* Phase II asks *is it still behaving like that?*
+
+Enter the baseline's **centre line** and **sigma** — both are on the certified-baseline screen in
+the Studio — and the new data is judged against them. **The limits are never recomputed from the
+new data.** A drifted process would otherwise redraw its own limits around the drift and appear
+perfectly in control.
+
+---
+
+## Not yet in the Studio
+
+The Studio's guided workflow — pass 1, decisions, certify, audit trail — is **single-variable**.
+Everything above (attribute charts, rule sets, non-normal capability, Phase II) is available
+through the Analyze page today. Multi-variable studies with cross-variable flagging (an
+observation removed from one variable surfacing as a suspect in another) are supported by the
+engine but not yet exposed in the Studio UI.

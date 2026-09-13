@@ -118,14 +118,22 @@ export function TestReference() {
     return registry.families
       .map((family) => ({
         family,
-        tests: registry.tests.filter(
-          (t) =>
-            t.family === family &&
-            (!needle ||
-              t.name.toLowerCase().includes(needle) ||
-              t.id.includes(needle) ||
-              t.description.toLowerCase().includes(needle)),
-        ),
+        tests: registry.tests.filter((t) => {
+          if (t.family !== family) return false;
+          if (!needle) return true;
+          // Search param choices too (e.g. "nelson" only appears as a rule_set
+          // option's value, never in a test's name or description) - otherwise
+          // a query for a real, present feature silently returns nothing.
+          const haystack = [
+            t.name,
+            t.id,
+            t.description,
+            ...t.params.flatMap((p) => [p.label, ...p.choices]),
+          ]
+            .join(" ")
+            .toLowerCase();
+          return haystack.includes(needle);
+        }),
       }))
       .filter((g) => g.tests.length > 0);
   }, [registry, query]);

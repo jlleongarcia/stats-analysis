@@ -224,7 +224,12 @@ def rules_fired(
     same "which rules fired here" answer.
     """
     row = individual_violations.iloc[position]
-    fired = [name for name in RULE_COLUMNS if bool(row[name])]
+    # Every boolean column except the roll-up, so an alternate rule set (WECO,
+    # Nelson) reports its own rule names without a special case here.
+    fired = [
+        name for name in individual_violations.columns
+        if name != "any_violation" and bool(row[name])
+    ]
     if bool(mr_violations.iloc[position]):
         fired.append("mr_rule1")
     return fired

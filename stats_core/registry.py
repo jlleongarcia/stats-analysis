@@ -504,6 +504,11 @@ REGISTRY: tuple[TestSpec, ...] = (
                        "only - the chart never re-sorts your rows."),
         ),
         params=(
+            Param("rule_set", "Rule set", "select", "oakland",
+                  ("oakland", "weco", "nelson"),
+                  "oakland: the configurable four below. weco: Western Electric's "
+                  "four zone tests. nelson: Nelson's eight - more sensitive, and "
+                  "more false alarms."),
             Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
             Param("rule2_window", "Rule 2 - window", "number", 3),
             Param("rule3_k", "Rule 3 - run length", "number", 8),
@@ -530,6 +535,11 @@ REGISTRY: tuple[TestSpec, ...] = (
         params=(
             Param("usl", "Upper specification limit (USL)", "number", None),
             Param("lsl", "Lower specification limit (LSL)", "number", None),
+            Param("target", "Target value (optional, enables Cpm)", "number", None),
+            Param("method", "Method for non-normal data", "select", "normal",
+                  ("normal", "percentile", "boxcox"),
+                  "normal assumes a normal distribution; percentile is ISO 22514-2 "
+                  "and distribution-free; boxcox reports a normalising transform."),
         ),
         assumptions=(
             "Process is in statistical control",
@@ -590,6 +600,99 @@ REGISTRY: tuple[TestSpec, ...] = (
             "Every subgroup holds the same number of observations",
         ),
         min_n=4,
+    ),
+    TestSpec(
+        "control_chart_p", "Attribute chart (p - proportion defective)", "spc",
+        "Plots the fraction of units that were defective in each sample. Limits follow the sample size, so a small sample is not held to the same precision as a large one.",
+        spc.control_chart_p,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("size", "Sample size", NUMERIC,
+                 help="How many units were inspected in each sample."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Each unit is pass/fail, and failures are independent",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_np", "Attribute chart (np - number defective)", "spc",
+        "Plots the raw count of defective units. Requires a constant sample size; use a p chart when it varies.",
+        spc.control_chart_np,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("size", "Sample size", NUMERIC,
+                 help="How many units were inspected in each sample."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Each unit is pass/fail, and failures are independent",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_c", "Attribute chart (c - defect count)", "spc",
+        "Plots the number of defects found per inspection unit, where every unit offers the same opportunity for defects.",
+        spc.control_chart_c,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Defects occur independently at a constant rate",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_u", "Attribute chart (u - defects per unit)", "spc",
+        "Plots defects per unit when the amount inspected varies between samples - metres of cable, hours of running, batches of parts.",
+        spc.control_chart_u,
+        roles=(
+            Role("values", "Count", NUMERIC,
+                 help="One count per sample, in the order collected."),
+            Role("size", "Sample size", NUMERIC,
+                 help="How many units were inspected in each sample."),
+            Role("order", "Sample label (optional)", ANY, required=False),
+        ),
+        assumptions=(
+            "Samples are in time order",
+            "Defects occur independently at a constant rate",
+        ),
+        min_n=4,
+    ),
+    TestSpec(
+        "control_chart_phase_ii", "Phase II monitoring (frozen baseline)", "spc",
+        "Plots new observations against control limits from a certified Phase I "
+        "baseline. The limits are supplied, never recomputed - a drifted process "
+        "must not be allowed to redraw its own limits and look stable.",
+        spc.control_chart_phase_ii,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="New observations to monitor, in process order."),
+            Role("order", "Observation label (optional)", ANY, required=False),
+        ),
+        params=(
+            Param("center", "Baseline centre line", "number", None),
+            Param("sigma_within", "Baseline sigma (within)", "number", None),
+            Param("rule_set", "Rule set", "select", "oakland",
+                  ("oakland", "weco", "nelson")),
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "The baseline came from a certified Phase I study",
+            "The measurement and conditions match that baseline",
+        ),
+        min_n=1,
     ),
 )
 

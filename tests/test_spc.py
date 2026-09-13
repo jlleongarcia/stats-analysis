@@ -1130,3 +1130,323 @@ class TestSubgroupEntries:
 
         with pytest.raises(DataError, match="must differ"):
             run_test("control_chart_xbar_r", _subgrouped(), {"values": "m", "subgroup": "m"}, {})
+
+
+# --------------------------------------------------------------------------
+# attribute charts (p, np, c, u)
+# --------------------------------------------------------------------------
+
+
+class TestAttributeCharts:
+    @staticmethod
+    def _binomial(n_samples=30, size=200, p=0.04, spike_at=None, seed=5):
+        rng = np.random.default_rng(seed)
+        counts = list(rng.binomial(size, p, n_samples))
+        if spike_at is not None:
+            counts[spike_at] = int(size * p * 4)
+        return {"d": counts, "n": [size] * n_samples}
+
+    def test_p_chart_centre_is_the_pooled_proportion(self):
+        from stats_core.spc.attributes import p_chart
+
+        data = self._binomial()
+        chart = p_chart(pd.Series(data["d"]), pd.Series(data["n"]))
+        assert chart.centre == pytest.approx(sum(data["d"]) / sum(data["n"]))
+        assert chart.constant_limits
+
+    def test_p_chart_limits_follow_a_varying_sample_size(self):
+        from stats_core.spc.attributes import p_chart
+
+        sizes = [50, 500, 50, 500, 50, 500]
+        chart = p_chart(pd.Series([2, 20, 3, 21, 1, 19]), pd.Series(sizes))
+        assert not chart.constant_limits
+        # A small sample tolerates more variation, so its limits are wider.
+        width = chart.ucl - chart.lcl
+        assert width.iloc[0] > width.iloc[1]
+
+    def test_p_chart_rejects_more_defectives_than_units(self):
+        from stats_core.spc.attributes import p_chart
+
+        with pytest.raises(DataError, match="cannot exceed the sample size"):
+            p_chart(pd.Series([15, 3, 2]), pd.Series([10, 10, 10]))
+
+    def test_np_chart_requires_a_constant_sample_size(self):
+        from stats_core.spc.attributes import np_chart
+
+        with pytest.raises(DataError, match="same size"):
+            np_chart(pd.Series([1, 2, 3, 4]), pd.Series([10, 20, 10, 20]))
+
+    def test_c_chart_uses_the_poisson_square_root(self):
+        from stats_core.spc.attributes import c_chart
+
+        counts = pd.Series([9.0] * 20)
+        chart = c_chart(counts)
+        assert chart.centre == pytest.approx(9.0)
+        assert chart.ucl.iloc[0] == pytest.approx(9 + 3 * 3)  # c_bar + 3*sqrt(c_bar)
+
+    def test_u_chart_scales_by_the_inspected_amount(self):
+        from stats_core.spc.attributes import u_chart
+
+        chart = u_chart(pd.Series([10.0, 20.0]), pd.Series([100.0, 200.0]))
+        assert chart.values.tolist() == pytest.approx([0.1, 0.1])
+        assert chart.centre == pytest.approx(0.1)
+
+    def test_lower_limit_is_never_negative(self):
+        from stats_core.spc.attributes import c_chart, p_chart
+
+        assert (c_chart(pd.Series([1.0, 2.0, 1.0, 0.0])).lcl >= 0).all()
+        assert (p_chart(pd.Series([1, 0, 2]), pd.Series([100] * 3)).lcl >= 0).all()
+
+    def test_small_counts_are_flagged_as_unreliable(self):
+        from stats_core.spc.attributes import c_chart, small_count_warning
+
+        assert small_count_warning(c_chart(pd.Series([1.0, 0.0, 2.0, 1.0]))) is not None
+        assert small_count_warning(c_chart(pd.Series([20.0, 22.0, 19.0]))) is None
+
+    def test_registry_entries_run_and_flag(self):
+        from stats_core import run_test
+
+        data = self._binomial(spike_at=17)
+        out = run_test("control_chart_p", data, {"values": "d", "size": "n"}, {})
+        assert out["statistic"]["flagged"] >= 1
+        assert out["plotSpecs"][0]["kind"] == "controlChart"
+
+    def test_varying_sizes_emit_a_stepped_limit_series(self):
+        from stats_core import run_test
+
+        sizes = [200, 150, 300, 120, 250] * 6
+        rng = np.random.default_rng(3)
+        data = {"d": list(rng.binomial(sizes, 0.05)), "n": sizes}
+        out = run_test("control_chart_p", data, {"values": "d", "size": "n"}, {})
+        assert "limitSeries" in out["plotSpecs"][0]
+        assert len(out["plotSpecs"][0]["limitSeries"]["ucl"]) == len(sizes)
+        assert any("stepped boundary" in n for n in out["notes"])
+
+    def test_c_chart_needs_no_size_column(self):
+        from stats_core import run_test
+
+        rng = np.random.default_rng(7)
+        out = run_test("control_chart_c", {"d": list(rng.poisson(9, 25))}, {"values": "d"}, {})
+        assert out["statistic"]["samples"] == 25.0
+
+    def test_p_chart_without_a_size_column_is_refused(self):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="sample-size column"):
+            run_test("control_chart_p", {"d": [1, 2, 3]}, {"values": "d"}, {})
+
+
+# --------------------------------------------------------------------------
+# named rule sets
+# --------------------------------------------------------------------------
+
+
+class TestRuleSets:
+    def test_three_sets_are_available(self):
+        from stats_core.spc.rulesets import RULE_SETS
+
+        assert set(RULE_SETS) == {"oakland", "weco", "nelson"}
+
+    def test_nelson_has_eight_rules_and_weco_four(self):
+        from stats_core.spc.rulesets import RULE_SETS
+
+        assert len(RULE_SETS["nelson"].rules) == 8
+        assert len(RULE_SETS["weco"].rules) == 4
+
+    @staticmethod
+    def _flat(n=40):
+        return pd.Series([100.0 + (0.2 if i % 2 else -0.2) for i in range(n)])
+
+    def test_beyond_three_sigma_fires(self):
+        from stats_core.spc.rulesets import apply_rule_set
+
+        s = self._flat()
+        lim = compute_limits(s)
+        s.iloc[20] = lim["i_cl"] + 4 * (lim["i_ucl"] - lim["i_cl"]) / 3
+        assert apply_rule_set(s, compute_limits(s), "nelson")["nelson1"].any()
+
+    def test_two_of_three_beyond_two_sigma_fires(self):
+        from stats_core.spc.rulesets import apply_rule_set
+
+        s = self._flat()
+        lim = compute_limits(s)
+        sigma = (lim["i_ucl"] - lim["i_cl"]) / 3
+        s.iloc[20] = s.iloc[22] = lim["i_cl"] + 2.4 * sigma
+        flags = apply_rule_set(s, compute_limits(s), "weco")
+        assert flags["weco2"].any()
+
+    def test_opposite_sides_do_not_combine(self):
+        """2-of-3 must be same-side: one high and one low is not a shift."""
+        from stats_core.spc.rulesets import apply_rule_set
+
+        s = self._flat()
+        lim = compute_limits(s)
+        sigma = (lim["i_ucl"] - lim["i_cl"]) / 3
+        s.iloc[20] = lim["i_cl"] + 2.4 * sigma
+        s.iloc[21] = lim["i_cl"] - 2.4 * sigma
+        assert not apply_rule_set(s, compute_limits(s), "weco")["weco2"].any()
+
+    def test_stratification_rule_fires_on_an_unnaturally_tight_series(self):
+        from stats_core.spc.rulesets import apply_rule_set
+
+        s = self._flat()  # everything hugs the centre line
+        assert apply_rule_set(s, compute_limits(s), "nelson")["nelson7"].any()
+
+    def test_nelson_signals_at_least_as_often_as_weco(self):
+        rng = np.random.default_rng(21)
+        from stats_core.spc.rulesets import apply_rule_set
+
+        nelson = weco = 0
+        for _ in range(60):
+            s = pd.Series(rng.normal(100, 2, 80))
+            lim = compute_limits(s)
+            nelson += int(apply_rule_set(s, lim, "nelson")["any_violation"].sum())
+            weco += int(apply_rule_set(s, lim, "weco")["any_violation"].sum())
+        assert nelson >= weco
+
+    def test_rule_set_reaches_the_registry_entry(self):
+        from stats_core import run_test
+
+        rng = np.random.default_rng(0)
+        v = rng.normal(100, 2, 80).tolist()
+        counts = {
+            rs: run_test("control_chart_imr", {"m": v}, {"values": "m"}, {"rule_set": rs})
+            ["statistic"]["flagged"]
+            for rs in ("oakland", "weco", "nelson")
+        }
+        assert counts["nelson"] >= counts["weco"]
+
+    def test_unknown_rule_set_is_refused(self):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="Unknown rule set"):
+            run_test("control_chart_imr", {"m": [1.0, 2, 3, 4]}, {"values": "m"},
+                     {"rule_set": "sixsigma"})
+
+
+# --------------------------------------------------------------------------
+# capability: intervals, Cpm, non-normal data
+# --------------------------------------------------------------------------
+
+
+class TestCapabilityExtensions:
+    def test_cpk_interval_widens_as_n_shrinks(self):
+        from stats_core.spc.capability import cpk_confidence_interval
+
+        wide = cpk_confidence_interval(1.33, 15)
+        narrow = cpk_confidence_interval(1.33, 200)
+        assert (wide[1] - wide[0]) > (narrow[1] - narrow[0])
+        assert wide[0] < 1.33 < wide[1]
+
+    def test_cpm_punishes_being_off_target(self):
+        from stats_core.spc.capability import compute_cpm
+
+        rng = np.random.default_rng(4)
+        s = pd.Series(rng.normal(100, 1.5, 60))
+        assert compute_cpm(s, 106, 94, 100) > compute_cpm(s, 106, 94, 103)
+
+    def test_boxcox_improves_normality_on_skewed_data(self):
+        from stats_core.spc.capability import transform_to_normal
+
+        rng = np.random.default_rng(4)
+        result = transform_to_normal(pd.Series(rng.lognormal(3, 0.35, 300)))
+        assert result["improved"]
+        assert result["p_after"] > 0.05
+
+    def test_boxcox_refuses_non_positive_data(self):
+        from stats_core.spc.capability import transform_to_normal
+
+        with pytest.raises(DataError, match="strictly positive"):
+            transform_to_normal(pd.Series([1.0, -2.0, 3.0]))
+
+    def test_percentile_method_disagrees_with_normal_theory_on_skew(self):
+        """The whole reason the method exists."""
+        from stats_core.spc.capability import compute_capability, percentile_capability
+
+        rng = np.random.default_rng(4)
+        s = pd.Series(rng.lognormal(3, 0.35, 400))
+        usl, lsl = float(s.max() * 1.2), 0.1
+        assert percentile_capability(s, usl, lsl)["ppk_percentile"] != pytest.approx(
+            compute_capability(s, usl, lsl)["ppk"], rel=0.05
+        )
+
+    def test_percentile_matches_normal_theory_on_normal_data(self):
+        from stats_core.spc.capability import compute_capability, percentile_capability
+
+        rng = np.random.default_rng(8)
+        s = pd.Series(rng.normal(100, 2, 4000))
+        assert percentile_capability(s, 108, 92)["pp_percentile"] == pytest.approx(
+            compute_capability(s, 108, 92)["pp"], rel=0.08
+        )
+
+    def test_entry_reports_interval_and_cpm(self):
+        from stats_core import run_test
+
+        rng = np.random.default_rng(9)
+        out = run_test("process_capability", {"m": rng.normal(50, 1.0, 40).tolist()},
+                       {"values": "m"}, {"usl": 54, "lsl": 46, "target": 50})
+        labels = [row[0] for row in out["tables"][0]["rows"]]
+        assert "Cpk 95% CI" in labels
+        assert "Cpm" in labels
+
+    def test_non_normal_data_gets_a_method_hint(self):
+        from stats_core import run_test
+
+        rng = np.random.default_rng(4)
+        s = rng.lognormal(3, 0.5, 200)
+        out = run_test("process_capability", {"m": s.tolist()}, {"values": "m"},
+                       {"usl": float(s.max() * 1.3), "lsl": 0.5})
+        assert any("distribution-free" in n for n in out["notes"])
+
+
+# --------------------------------------------------------------------------
+# Phase II monitoring
+# --------------------------------------------------------------------------
+
+
+class TestPhaseII:
+    def test_limits_come_from_the_baseline_not_the_new_data(self):
+        """The defining property: a drifted process must not redraw its limits."""
+        from stats_core import run_test
+
+        rng = np.random.default_rng(9)
+        drifted = rng.normal(52.0, 1.0, 30).tolist()
+        out = run_test("control_chart_phase_ii", {"m": drifted}, {"values": "m"},
+                       {"center": 50.0, "sigma_within": 1.0})
+        assert out["statistic"]["baseline_centre"] == 50.0
+        # Recomputing from the drifted data would have centred on ~52 and found
+        # nothing wrong; against the frozen baseline it is obvious.
+        assert out["statistic"]["flagged"] > 0
+        assert out["statistic"]["shift_in_sigma"] == pytest.approx(2.0, abs=0.4)
+
+    def test_in_control_data_passes_cleanly(self):
+        from stats_core import run_test
+
+        rng = np.random.default_rng(12)
+        out = run_test("control_chart_phase_ii",
+                       {"m": rng.normal(50.0, 1.0, 20).tolist()}, {"values": "m"},
+                       {"center": 50.0, "sigma_within": 1.0})
+        assert out["statistic"]["flagged"] == 0.0
+        assert "All within the baseline limits" in out["summary"]
+
+    def test_large_shift_gets_its_own_warning(self):
+        from stats_core import run_test
+
+        rng = np.random.default_rng(9)
+        out = run_test("control_chart_phase_ii",
+                       {"m": rng.normal(53.0, 1.0, 25).tolist()}, {"values": "m"},
+                       {"center": 50.0, "sigma_within": 1.0})
+        assert any("no longer describes" in n for n in out["notes"])
+
+    def test_missing_baseline_is_refused_with_guidance(self):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="certified Phase I"):
+            run_test("control_chart_phase_ii", {"m": [1.0, 2, 3]}, {"values": "m"}, {})
+
+    def test_never_recomputes_limits_note_is_present(self):
+        from stats_core import run_test
+
+        out = run_test("control_chart_phase_ii", {"m": [50.0, 50.5, 49.5, 50.1]},
+                       {"values": "m"}, {"center": 50.0, "sigma_within": 1.0})
+        assert any("NOT recomputed" in n for n in out["notes"])

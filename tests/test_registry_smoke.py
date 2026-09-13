@@ -71,6 +71,11 @@ def _roles_for(test_id, ceras, fame, fame2, two_group_ceras, campaign_col):
         # 29 rows -> 9 complete subgroups of 3, enough for limits.
         "control_chart_xbar_r": (ceras, {"values": num[0]}, {"subgroup_size": 3}),
         "control_chart_xbar_s": (ceras, {"values": num[0]}, {"subgroup_size": 3}),
+        "control_chart_p": (None, None, None),   # needs count + size columns; own module
+        "control_chart_np": (None, None, None),
+        "control_chart_c": (None, None, None),
+        "control_chart_u": (None, None, None),
+        "control_chart_phase_ii": (None, None, None),  # needs baseline params; own module
         "process_capability": (
             ceras,
             {"values": num[0]},

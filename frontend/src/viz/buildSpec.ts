@@ -128,6 +128,21 @@ function controlChartSpec(plot: PlotSpec): TopLevelSpec {
     });
   }
 
+  // Per-point limits (p and u charts, where the sample size varies) are drawn
+  // as a stepped boundary rather than a straight rule: the limit genuinely
+  // changes between samples, and a straight line would misstate every one.
+  const limitSeries = plot.limitSeries as { ucl?: number[]; lcl?: number[] } | undefined;
+  for (const side of ["ucl", "lcl"] as const) {
+    const series = limitSeries?.[side];
+    if (!series) continue;
+    layers.push({
+      data: { values: values.map((row, i) => ({ ...row, limit: series[i] })) },
+      mark: { type: "line", color: CONTROL_COLOR.action, strokeDash: CONTROL_DASH.action,
+              strokeWidth: 1.5, interpolate: "step-after" },
+      encoding: { x: xEnc, y: { field: "limit", type: "quantitative", scale: yScale } },
+    });
+  }
+
   // A single continuous line through every point in order: the chronology has
   // to stay readable regardless of which points are flagged.
   layers.push({

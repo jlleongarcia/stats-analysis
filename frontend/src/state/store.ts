@@ -24,6 +24,24 @@ import type {
 
 export const MAX_ROWS_SOFT = 100_000;
 
+/** Which dataset was selected, remembered across reloads.
+ *
+ * Datasets and analyses already live in IndexedDB, but the *selection* was
+ * in-memory only, so a refresh dropped you back to "import a dataset first"
+ * with your work still on disk but out of reach. Only the id is stored; the
+ * dataset itself is re-read from IndexedDB, so this can never go stale. */
+const ACTIVE_KEY = "stats-analysis.activeDataset";
+
+function rememberActive(id: string | null) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_KEY, id);
+    else localStorage.removeItem(ACTIVE_KEY);
+  } catch {
+    // Private browsing or a blocked storage partition: losing the selection on
+    // reload is a smaller problem than failing to select at all.
+  }
+}
+
 type EngineStatus = "idle" | "booting" | "ready" | "error";
 type RunStatus = "idle" | "running" | "done" | "error";
 
@@ -104,19 +122,27 @@ export const useApp = create<AppState>((set, get) => ({
     await saveDataset(ds);
     await get().refreshDatasets();
     set({ activeDataset: ds });
+    rememberActive(ds.id);
     return ds;
   },
 
   setActiveDataset(id) {
-    if (id === null) return set({ activeDataset: null });
+    if (id === null) {
+      rememberActive(null);
+      return set({ activeDataset: null });
+    }
     const ds = get().datasets.find((d) => d.id === id) ?? null;
     set({ activeDataset: ds, lastResult: null, runStatus: "idle", runError: null });
+    rememberActive(ds?.id ?? null);
     if (ds) void get().refreshAnalyses();
   },
 
   async removeDataset(id) {
     await deleteDataset(id);
-    if (get().activeDataset?.id === id) set({ activeDataset: null });
+    if (get().activeDataset?.id === id) {
+      set({ activeDataset: null });
+      rememberActive(null);
+    }
     await get().refreshDatasets();
   },
 
@@ -174,5 +200,22 @@ export const useApp = create<AppState>((set, get) => ({
   },
 }));
 
-// keep dataset list warm on load
-void db.open().then(() => useApp.getState().refreshDatasets());
+// Warm the dataset list on load, then restore the previously selected dataset
+// so a reload lands you back where you were.
+void db.open().then(async () => {
+  await useApp.getState().refreshDatasets();
+  let remembered: string | null = null;
+  try {
+    remembered = localStorage.getItem(ACTIVE_KEY);
+  } catch {
+    remembered = null;
+  }
+  if (!remembered) return;
+  // Re-read state after the refresh: the snapshot taken before it is stale.
+  if (useApp.getState().datasets.some((d) => d.id === remembered)) {
+    useApp.getState().setActiveDataset(remembered);
+  } else {
+    // The dataset was deleted in another tab; drop the dangling pointer.
+    rememberActive(null);
+  }
+});

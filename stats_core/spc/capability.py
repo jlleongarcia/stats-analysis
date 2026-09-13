@@ -28,6 +28,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from stats_core._util import DataError
 from stats_core.spc.constants import D2
 from stats_core.spc.limits import compute_moving_range
 
@@ -140,4 +141,116 @@ def compute_capability(
         "rpi": cp,  # (2T) / (6 sigma) == (USL - LSL) / (6 sigma) == Cp
         "capable_cp": cp >= CP_CAPABLE,
         "capable_cpk": cpk >= CPK_CAPABLE,
+    }
+
+
+# --------------------------------------------------------------------------
+# non-normal data, interval estimates and the Taguchi index
+# --------------------------------------------------------------------------
+
+def cpk_confidence_interval(
+    cpk: float, n: int, *, confidence: float = 0.95
+) -> tuple[float, float]:
+    """Approximate confidence interval for Cpk (Bissell, 1990).
+
+    Capability indices are point estimates from a sample, and at the sample
+    sizes SPC studies typically run on they are far less precise than their
+    three decimal places suggest. The standard error
+
+    .. math:: SE(C_{pk}) \\approx \\sqrt{\\frac{1}{9n} + \\frac{C_{pk}^2}{2(n-1)}}
+
+    makes that concrete: at n = 30 a reported Cpk of 1.33 is compatible with
+    anything from roughly 1.0 to 1.7.
+    """
+    from scipy import stats as _stats
+
+    if n < 2 or not np.isfinite(cpk):
+        return (float("nan"), float("nan"))
+    se = np.sqrt(1.0 / (9 * n) + cpk**2 / (2 * (n - 1)))
+    z = _stats.norm.ppf(0.5 + confidence / 2)
+    return (float(cpk - z * se), float(cpk + z * se))
+
+
+def compute_cpm(values: pd.Series, usl: float, lsl: float, target: float) -> float:
+    """Taguchi's Cpm, which penalises departure from a target.
+
+    Cp and Cpk both treat the tolerance band as the only thing that matters. Cpm
+    adds the target into the denominator
+
+    .. math:: C_{pm} = \\frac{USL - LSL}{6\\sqrt{\\sigma^2 + (\\mu - T)^2}}
+
+    so a process that is on-spec but off-target scores lower. Use it when being
+    close to nominal has value in itself - which is the usual case in assembly,
+    where tolerances stack.
+    """
+    clean = values.dropna()
+    mu = float(clean.mean())
+    sigma = float(clean.std(ddof=1))
+    denominator = np.sqrt(sigma**2 + (mu - target) ** 2)
+    if denominator <= 0:
+        return float("inf")
+    return float((usl - lsl) / (6 * denominator))
+
+
+def transform_to_normal(values: pd.Series) -> dict:
+    """Find a Box-Cox power transform that makes *values* closer to normal.
+
+    Cp and Cpk assume normality: they convert a sigma into a tail probability,
+    and on skewed data that conversion is simply wrong - typically optimistic,
+    because the long tail is the side that generates defects.
+
+    Two honest options exist. Transform the data, compute capability in the
+    transformed space and transform the limits back (this function), or abandon
+    sigma entirely and read the percentiles directly
+    (:func:`percentile_capability`). This one needs strictly positive data.
+    """
+    from scipy import stats as _stats
+
+    clean = values.dropna()
+    if (clean <= 0).any():
+        raise DataError(
+            "Box-Cox needs strictly positive values. Shift the data, or use the "
+            "percentile method, which makes no distributional assumption."
+        )
+    transformed, lam = _stats.boxcox(clean.to_numpy(float))
+    _, p_before = _stats.shapiro(clean)
+    _, p_after = _stats.shapiro(transformed)
+    return {
+        "lambda": float(lam),
+        "values": pd.Series(transformed, index=clean.index),
+        "p_before": float(p_before),
+        "p_after": float(p_after),
+        "improved": bool(p_after > p_before),
+    }
+
+
+def percentile_capability(
+    values: pd.Series, usl: float, lsl: float
+) -> dict[str, float]:
+    """Capability from observed percentiles - the ISO 22514-2 approach.
+
+    Replaces the +/-3 sigma span with the actual 0.135th and 99.865th
+    percentiles, which are the points a normal distribution would place three
+    sigma out. No distributional assumption is made, so it stays valid on skewed
+    data; the cost is that estimating a 0.135th percentile from a few dozen
+    points is inherently noisy.
+    """
+    clean = values.dropna().to_numpy(float)
+    if clean.size < 2:
+        raise ValueError("At least 2 observations are required.")
+    if usl <= lsl:
+        raise ValueError("USL must be strictly greater than LSL.")
+
+    lo, median, hi = np.percentile(clean, [0.135, 50, 99.865])
+    spread = hi - lo
+    pp = (usl - lsl) / spread if spread > 0 else float("inf")
+    upper = (usl - median) / (hi - median) if hi > median else float("inf")
+    lower = (median - lsl) / (median - lo) if median > lo else float("inf")
+
+    return {
+        "pp_percentile": float(pp),
+        "ppk_percentile": float(min(upper, lower)),
+        "p0_135": float(lo),
+        "median": float(median),
+        "p99_865": float(hi),
     }

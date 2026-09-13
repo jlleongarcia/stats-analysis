@@ -18,13 +18,22 @@ import pandas as pd
 
 from stats_core._util import DataError
 from stats_core.results import ResultTable, TestResult
-from stats_core.spc.capability import compute_capability
-from stats_core.spc.charts import control_chart_specs, subgroup_chart_specs
+from stats_core.spc.capability import (
+    compute_capability, compute_cpm, cpk_confidence_interval, percentile_capability,
+    transform_to_normal,
+)
+from stats_core.spc.attributes import (
+    c_chart, np_chart, p_chart, small_count_warning, u_chart,
+)
+from stats_core.spc.charts import (
+    attribute_chart_specs, control_chart_specs, subgroup_chart_specs,
+)
 from stats_core.spc.phase_i import control_lines_table, run_phase_i_pass
 from stats_core.spc.precheck import normality_precheck
 from stats_core.spc.rules import (
     DEFAULT_RULE_CONFIG, RULE_LABELS, apply_all_rules, apply_spread_rules, rules_fired,
 )
+from stats_core.spc.rulesets import RULE_SETS, apply_rule_set, rule_labels
 from stats_core.spc.subgroups import build_subgroups, xbar_r_limits, xbar_s_limits
 from stats_core.spc.verdicts import capability_verdicts
 
@@ -82,6 +91,19 @@ def control_chart_imr(frame: pd.DataFrame, roles: dict, params: dict) -> TestRes
     rule_config = _rule_params(params)
 
     result = run_phase_i_pass(values, **rule_config)
+
+    rule_set = str(params.get("rule_set", "oakland"))
+    if rule_set not in RULE_SETS:
+        raise DataError(
+            f"Unknown rule set {rule_set!r}; choose one of {', '.join(RULE_SETS)}."
+        )
+    if rule_set != "oakland":
+        # Oakland's four support configurable thresholds and live in rules.py;
+        # the named sets are fixed by their standards, so they replace the
+        # individuals-chart flags wholesale. MR-chart rules are unaffected.
+        result.individual_violations = apply_rule_set(result.values, result.limits, rule_set)
+        RULE_LABELS.update(rule_labels(rule_set))
+
     flagged = result.flagged_positions
 
     violations = ResultTable(
@@ -175,6 +197,34 @@ def process_capability(frame: pd.DataFrame, roles: dict, params: dict) -> TestRe
     in_control = not result.any_violations
     cap = compute_capability(result.values, usl, lsl, mr_bar=result.limits["mr_bar"])
 
+    normality = normality_precheck(result.values)
+    method = str(params.get("method", "normal"))
+    extras: list[list] = []
+
+    # Cpk is a point estimate from a sample; at typical SPC sample sizes it is
+    # far less precise than three decimals suggest.
+    lo, hi = cpk_confidence_interval(cap["cpk"], result.n_original)
+    if lo == lo:  # not NaN
+        extras.append(["Cpk 95% CI", f"{lo:.3f} to {hi:.3f}",
+                       "sigma within", "Interval estimate (Bissell, 1990)"])
+
+    target = params.get("target")
+    if target is not None:
+        cpm = compute_cpm(result.values, usl, lsl, float(target))
+        extras.append(["Cpm", cpm, "sigma overall + offset",
+                       f"Taguchi index against target {float(target):g}"])
+
+    if method == "percentile":
+        pc = percentile_capability(result.values, usl, lsl)
+        extras.append(["Pp (percentile)", pc["pp_percentile"], "observed spread",
+                       "ISO 22514-2, no normality assumption"])
+        extras.append(["Ppk (percentile)", pc["ppk_percentile"], "observed spread",
+                       "ISO 22514-2, no normality assumption"])
+    elif method == "boxcox":
+        t = transform_to_normal(result.values)
+        extras.append(["Box-Cox lambda", t["lambda"], "transform",
+                       f"Shapiro-Wilk p {t['p_before']:.2e} -> {t['p_after']:.3f}"])
+
     indices = ResultTable(
         title="Capability indices",
         columns=["index", "value", "based on", "meaning"],
@@ -186,6 +236,8 @@ def process_capability(frame: pd.DataFrame, roles: dict, params: dict) -> TestRe
             ["RPI", cap["rpi"], "sigma within", "Relative precision index (equals Cp)"],
         ],
     )
+
+    indices.rows.extend(extras)
 
     out = TestResult(
         test_id="process_capability",
@@ -204,7 +256,7 @@ def process_capability(frame: pd.DataFrame, roles: dict, params: dict) -> TestRe
             "sigma_within": cap["sigma_within"],
             "sigma_overall": cap["sigma_overall"],
         },
-        assumptions=[normality_precheck(result.values)],
+        assumptions=[normality],
         tables=[indices],
         plot_specs=[
             {
@@ -223,6 +275,14 @@ def process_capability(frame: pd.DataFrame, roles: dict, params: dict) -> TestRe
 
     for note in capability_verdicts(cap, in_control=in_control):
         out.add_note(note)
+    if normality.passed is False and method == "normal":
+        out.add_note(
+            "The data is not normal, and Cp/Cpk convert a sigma into a tail "
+            "probability - on skewed data that conversion is wrong, usually "
+            "optimistic, because the long tail is the side producing defects. "
+            "Re-run with the percentile method (ISO 22514-2, distribution-free) "
+            "or Box-Cox to see how much it matters."
+        )
     if not in_control:
         out.add_note(_NOT_A_BASELINE)
     return out
@@ -233,6 +293,11 @@ __all__ = [
     "process_capability",
     "control_chart_xbar_r",
     "control_chart_xbar_s",
+    "control_chart_p",
+    "control_chart_np",
+    "control_chart_c",
+    "control_chart_u",
+    "control_chart_phase_ii",
 ]
 
 
@@ -353,3 +418,253 @@ def control_chart_xbar_r(frame: pd.DataFrame, roles: dict, params: dict) -> Test
 def control_chart_xbar_s(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
     """X-bar and S chart for subgrouped measurements."""
     return _subgroup_chart(frame, roles, params, variant="s")
+
+
+_ATTRIBUTE_HELP = {
+    "p": ("Proportion defective", "defective units", True),
+    "np": ("Number defective", "defective units", True),
+    "c": ("Defect count", "defects found", False),
+    "u": ("Defects per unit", "defects found", True),
+}
+
+
+def _attribute_chart(frame: pd.DataFrame, roles: dict, params: dict, *, kind: str) -> TestResult:
+    """Shared body for the p, np, c and u entries."""
+    count_column = roles["values"]
+    if count_column not in frame.columns:
+        raise DataError(f"Column {count_column!r} is not in the dataset.")
+    counts = pd.to_numeric(frame[count_column], errors="coerce")
+
+    size_column = roles.get("size")
+    sizes = None
+    if size_column:
+        if size_column not in frame.columns:
+            raise DataError(f"Column {size_column!r} is not in the dataset.")
+        if size_column == count_column:
+            raise DataError("The count column and the sample-size column must differ.")
+        sizes = pd.to_numeric(frame[size_column], errors="coerce")
+    elif kind != "c":
+        raise DataError(
+            f"A {kind} chart needs a sample-size column - the count only means "
+            "something relative to how many units were inspected."
+        )
+
+    label_column = roles.get("order")
+    labels = None
+    if label_column:
+        if label_column not in frame.columns:
+            raise DataError(f"Column {label_column!r} is not in the dataset.")
+        labels = frame[label_column].astype(str)
+        if sizes is not None:
+            keep = counts.notna() & sizes.notna() & (sizes > 0)
+        else:
+            keep = counts.notna()
+        labels = labels[keep]
+
+    if kind == "p":
+        chart = p_chart(counts, sizes, labels)
+    elif kind == "np":
+        chart = np_chart(counts, sizes, labels)
+    elif kind == "c":
+        chart = c_chart(counts, labels)
+    else:
+        chart = u_chart(counts, sizes, labels)
+
+    violations = chart.violations
+    flagged = [i for i in range(chart.n_points) if bool(violations.iloc[i])]
+
+    table = ResultTable(
+        title="Flagged samples",
+        columns=["sample", "value", "sample size", "limit breached"],
+        rows=[
+            [
+                str(chart.labels[i]),
+                float(chart.values.iloc[i]),
+                float(chart.sizes.iloc[i]),
+                "above UAL" if chart.values.iloc[i] > chart.ucl.iloc[i] else "below LAL",
+            ]
+            for i in flagged
+        ],
+    )
+
+    out = TestResult(
+        test_id=f"control_chart_{kind}",
+        test_name=f"Attribute control chart ({kind})",
+        summary=(
+            f"{count_column}: {chart.n_points} samples, centre line "
+            f"{chart.centre:.4g}. "
+            + ("No samples outside the limits." if not flagged
+               else f"{len(flagged)} sample(s) outside the limits.")
+        ),
+        statistic={
+            "samples": float(chart.n_points),
+            "centre": float(chart.centre),
+            "total_counted": float(chart.values.mul(chart.sizes).sum())
+            if kind in ("p", "u") else float(chart.values.sum()),
+            "flagged": float(len(flagged)),
+        },
+        plot_specs=attribute_chart_specs(chart, column=count_column, violations=violations),
+    )
+    if table.rows:
+        out.tables.append(table)
+
+    if not chart.constant_limits:
+        out.add_note(
+            "Sample sizes vary, so the control limits vary with them and are "
+            "drawn as a stepped boundary. A proportion from a large sample is "
+            "far better determined than one from a small sample, and constant "
+            "limits would flag the small samples relentlessly."
+        )
+    warning = small_count_warning(chart)
+    if warning:
+        out.add_note(warning)
+    out.add_note(_NOT_A_BASELINE)
+    return out
+
+
+def control_chart_p(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
+    """p chart - proportion defective."""
+    return _attribute_chart(frame, roles, params, kind="p")
+
+
+def control_chart_np(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
+    """np chart - number defective, constant sample size."""
+    return _attribute_chart(frame, roles, params, kind="np")
+
+
+def control_chart_c(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
+    """c chart - defect count per constant inspection unit."""
+    return _attribute_chart(frame, roles, params, kind="c")
+
+
+def control_chart_u(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
+    """u chart - defects per unit with a varying inspected amount."""
+    return _attribute_chart(frame, roles, params, kind="u")
+
+
+def control_chart_phase_ii(frame: pd.DataFrame, roles: dict, params: dict) -> TestResult:
+    """Phase II: plot new data against a frozen baseline.
+
+    Phase I asks "was this process stable, and what are its limits?". Phase II
+    asks the different question "is it *still* behaving like that baseline?" -
+    and it must never recompute the limits from the new data, or a process that
+    has drifted will simply redraw its limits around the drift and look fine.
+
+    So the limits come in as parameters, from a certified Phase I study, and are
+    applied unchanged.
+    """
+    column = roles["values"]
+    values = _ordered_series(frame, roles)
+    rule_config = _rule_params(params)
+
+    centre = params.get("center")
+    sigma = params.get("sigma_within")
+    if centre is None or sigma is None:
+        raise DataError(
+            "Phase II needs the centre line and sigma from a certified Phase I "
+            "baseline. Run a Phase I study in the SPC Studio first - its "
+            "certified baseline reports both."
+        )
+    centre, sigma = float(centre), float(sigma)
+    if sigma <= 0:
+        raise DataError("Sigma must be greater than zero.")
+
+    clean = values.dropna()
+    if len(clean) < 1:
+        raise DataError(f"Column {column!r} has no numeric values to monitor.")
+
+    limits = {
+        "i_cl": centre,
+        "i_ucl": centre + 3 * sigma,
+        "i_uwl": centre + 2 * sigma,
+        "i_lwl": centre - 2 * sigma,
+        "i_lcl": centre - 3 * sigma,
+        "sigma_within": sigma,
+    }
+
+    rule_set = str(params.get("rule_set", "oakland"))
+    if rule_set not in RULE_SETS:
+        raise DataError(f"Unknown rule set {rule_set!r}; choose one of {', '.join(RULE_SETS)}.")
+    if rule_set == "oakland":
+        violations = apply_all_rules(clean.reset_index(drop=True), limits, **rule_config)
+    else:
+        violations = apply_rule_set(clean.reset_index(drop=True), limits, rule_set)
+        RULE_LABELS.update(rule_labels(rule_set))
+
+    labels = [str(v) for v in clean.index]
+    statuses, fired_text = [], []
+    for i in range(len(clean)):
+        fired = [
+            RULE_LABELS.get(name, name)
+            for name in violations.columns
+            if name != "any_violation" and bool(violations.iloc[i][name])
+        ]
+        statuses.append("violation" if fired else "in control")
+        fired_text.append("; ".join(fired))
+
+    n_flagged = int(violations["any_violation"].sum())
+    out_of_limits = int(((clean > limits["i_ucl"]) | (clean < limits["i_lcl"])).sum())
+    shift = (float(clean.mean()) - centre) / sigma
+
+    table = ResultTable(
+        title="Flagged observations",
+        columns=["observation", "value", "rules fired"],
+        rows=[
+            [labels[i], float(clean.iloc[i]), fired_text[i]]
+            for i in range(len(clean)) if statuses[i] == "violation"
+        ],
+    )
+
+    out = TestResult(
+        test_id="control_chart_phase_ii",
+        test_name="Phase II monitoring (frozen baseline)",
+        summary=(
+            f"{column}: {len(clean)} new observations against a baseline centred "
+            f"on {centre:.4g} with sigma {sigma:.4g}. "
+            + ("All within the baseline limits." if n_flagged == 0
+               else f"{n_flagged} observation(s) flagged, {out_of_limits} beyond the action limits.")
+        ),
+        statistic={
+            "n": float(len(clean)),
+            "baseline_centre": centre,
+            "baseline_sigma": sigma,
+            "new_mean": float(clean.mean()),
+            "shift_in_sigma": float(shift),
+            "flagged": float(n_flagged),
+        },
+        plot_specs=[{
+            "kind": "controlChart",
+            "panel": "individuals",
+            "title": f"Phase II - {column} against the frozen baseline",
+            "data": {"x": labels, "y": [float(v) for v in clean],
+                     "status": statuses, "rules": fired_text},
+            "lines": [
+                {"value": limits["i_ucl"], "label": "UAL", "kind": "action"},
+                {"value": limits["i_uwl"], "label": "UWL", "kind": "warning"},
+                {"value": limits["i_cl"], "label": "CL", "kind": "centre"},
+                {"value": limits["i_lwl"], "label": "LWL", "kind": "warning"},
+                {"value": limits["i_lcl"], "label": "LAL", "kind": "action"},
+            ],
+            "bands": [
+                {"from": limits["i_uwl"], "to": limits["i_ucl"], "kind": "warning"},
+                {"from": limits["i_lcl"], "to": limits["i_lwl"], "kind": "warning"},
+            ],
+            "encoding": {"x": {"field": "x", "title": str(clean.index.name or "Observation")},
+                         "y": {"field": "y", "title": column}},
+        }],
+    )
+    if table.rows:
+        out.tables.append(table)
+
+    out.add_note(
+        "These limits come from the baseline and are NOT recomputed from this "
+        "data. That is the whole point: a process that has drifted would "
+        "otherwise redraw its limits around the drift and appear in control."
+    )
+    if abs(shift) > 1:
+        out.add_note(
+            f"The new mean sits {shift:+.2f} sigma from the baseline centre. A "
+            "sustained shift of this size means the baseline no longer describes "
+            "the process - investigate, then re-establish it."
+        )
+    return out

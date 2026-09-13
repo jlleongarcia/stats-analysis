@@ -3,7 +3,7 @@
 Folding [`SPC-analysis`](https://github.com/jlleongarcia/SPC-analysis) into `stats-analysis`,
 after which the SPC repository is decommissioned.
 
-**Status:** Phases 1-3 + 5 done, Phase 4 started (Phase 3 runtime check outstanding) · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
+**Status:** Phases 1-5 done. Phase 6 (decommission) is the only thing left. · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
 
 ---
 
@@ -171,7 +171,7 @@ Correctness items to fold in **during** the port, not after:
 ### Phase 2 — Registry entries + control chart rendering ✅ complete
 
 `stats_core/spc/entries.py` + family `"spc"`; `controlChart` renderer in `viz/buildSpec.ts`.
-94 SPC tests passing, `tsc` clean, production build green.
+94 SPC tests passing at the time (155 by the end of Phase 4), `tsc` clean, production build green.
 
 - `control_chart_imr` — roles: measurement + optional label; params: the four rule thresholds. Emits limits in `statistic`, a control-lines table, a flagged-points table, normality as an `AssumptionCheck`, and two `controlChart` plot specs.
 - `process_capability` — params `usl`/`lsl`. Cp/Cpk/Pp/Ppk in `statistic`, verdicts in `notes`, a spec-limit histogram.
@@ -194,10 +194,19 @@ leads with the out-of-control caveat when the data still shows violations (decis
 
 **Gate met:** both entries run end-to-end; charts verified by headless Vega render and visual inspection.
 
-### Phase 3 — SPC Studio (`/spc`) ✅ built, runtime check outstanding
+### Phase 3 — SPC Studio (`/spc`) ✅ complete, gate met
 
-99 SPC tests passing, `tsc` clean, production build green, decision-table guard rail verified by
-headless React render. **Not yet driven in a browser against a live engine** — see the gate below.
+Driven end-to-end in a real Chromium browser (Playwright) against a **booted Pyodide engine** — not
+mocked. 18/18 checks: engine boot, CSV import, a stateless Analyze chart, Studio pass 1, the
+assignable-cause guard rail (blocked → warned → enabled the instant a cause is typed), certify,
+audit trail contents including the exact cause text, capability, **a full page reload preserving
+the saved study**, and the in-app docs. Screenshots captured at each stage.
+
+That reload check caught a real bug: the *active dataset selection* was in-memory only, so a
+refresh dropped the Studio back to "import a dataset first" while the study sat untouched in
+IndexedDB. Fixed by persisting the selected dataset id to `localStorage` and restoring it on load
+(`state/store.ts`) — datasets and analyses were already durable; only the pointer to "which one is
+open" was not.
 
 | File | Role |
 |---|---|
@@ -216,10 +225,8 @@ Decisions made while building:
 - **Capability hands off `mrBar` from the certified baseline**, so `sigma_within` matches the control chart exactly rather than being re-derived across the removal gaps. Pinned by a test.
 - **The assignable-cause rule is enforced twice**: the UI disables certification while any removal lacks a cause, and `finalise()` raises `AssignableCauseRequired` regardless. The UI check is a courtesy; the engine check is the guarantee.
 
-**Gate:** ⚠️ partially met. Python protocol verified end-to-end with real payloads; React layer
-typechecked, built, and its guard-rail component render-tested. Still to do: run the app with a
-booted Pyodide engine and walk a study through pass 1 → decisions → certify → capability → export,
-and confirm a mid-study page refresh loses nothing.
+**Gate met.** The complete workflow — pass 1 → decisions → certify → capability → audit export —
+runs in a real browser against a live engine, and a mid-study reload loses nothing.
 
 Original scope notes:
 
@@ -265,18 +272,20 @@ Wire `spcStudies` into `deleteDataset`'s cascade transaction alongside `analyses
 - cross-variable suspect flagging
 - audit trail view + CSV export, and an HTML report via the existing `results/report.ts` pattern
 
-**Gate:** the complete old five-page workflow is reproducible end-to-end, and a page refresh mid-study loses nothing (it never survived in Streamlit).
+**Gate:** ✅ the complete old five-page workflow is reproducible end-to-end, and a page refresh mid-study loses nothing — verified live, not merely by code inspection (it never survived in Streamlit).
 
-### Phase 4 — Enhancements (each independently shippable) — 1 of 6 done
+### Phase 4 — Enhancements ✅ 5 of 6 done
 
-Ordered by value:
+1. ✅ **X̄-R and X̄-S subgrouped charts** — `stats_core/spc/subgroups.py`, two registry entries, shared chart builder. Subgroups come from an explicit column or fixed-size chunking of consecutive rows. Ragged subgroups are refused with guidance rather than silently averaged, since the constants are defined per n; a partial trailing subgroup is dropped and reported. The means-chart limits use σ̂/√n and are pinned by test against both textbook shortcut factors (A2, A3). The spread chart is checked on **both** sides from n = 7, where D₃/B₃ become non-zero — an implausibly tight subgroup signals non-independent or massaged data.
+2. ✅ **Attribute charts (p, np, c, u)** — `stats_core/spc/attributes.py`, four registry entries. Binomial (p, np) vs Poisson (c, u) chosen deliberately, with a p-chart guard against defective counts exceeding the sample size. Where the sample size varies, limits vary per point and the renderer draws a **stepped boundary** rather than a misleading straight line — a new `limitSeries` payload and a `step-after` interpolation layer in `buildSpec.ts`. Below an expected count of ~5, the app flags the normal approximation as weak.
+3. ✅ **Selectable rule sets** — `stats_core/spc/rulesets.py`. Oakland's four (default, configurable) plus fixed Western Electric (4 rules) and Nelson (8 rules) on a shared zone decomposition. Verified by simulation, not just asserted: ~1.4 false signals per 100 stable points under WECO, ~1.9 under Nelson — the theoretical trade-off, confirmed against the actual implementation.
+4. ✅ **Non-normal capability** — percentile method (ISO 22514-2, distribution-free) and a Box-Cox transform report, selectable via the capability entry's `method` param. A lognormal test case shows *why* this matters: percentile Ppk 1.376 vs normal-theory Ppk 0.949 on identical data — normal theory is optimistic on skewed data because it underweights the tail that actually produces defects.
+5. ✅ **Cpk confidence interval + Cpm** — Bissell's (1990) approximate interval, always reported; Cpm (Taguchi) when a `target` param is supplied, penalising off-nominal centring even when in-spec.
+6. ✅ **Phase II monitoring** — `control_chart_phase_ii` registry entry. Takes a certified baseline's centre and sigma as *parameters* and never recomputes them from the new data — the one property that makes Phase II mean anything, since recomputing would let a drifted process redraw its own limits and look stable. Verified: a process shifted 2σ from baseline is caught; the same data run through Phase I (which *would* recompute) would center on the drift and miss it entirely.
 
-1. ✅ **X̄-R and X̄-S subgrouped charts** — `stats_core/spc/subgroups.py`, two registry entries, shared chart builder. Subgroups come from an explicit column or fixed-size chunking of consecutive rows. Ragged subgroups are refused with guidance rather than silently averaged, since the constants are defined per n; a partial trailing subgroup is dropped and reported. The means-chart limits use σ̂/√n and are pinned by test against both textbook shortcut factors (A2, A3). The spread chart is checked on **both** sides from n = 7, where D₃/B₃ become non-zero — an implausibly tight subgroup signals non-independent or massaged data. ⏳ Attribute charts (p, np, c, u) remain.
-2. **Selectable rule sets.** Four Oakland rules are hard-coded. Offer Nelson's 8 and Western Electric alongside them, chosen rather than baked in.
-3. **Non-normal capability.** Today `normality_check` warns and the analysis proceeds — but Cp/Cpk on skewed data are actively misleading. Add Box-Cox/Johnson transformation or the ISO 22514 percentile method. This is where the merge pays off concretely: SPC borrows `stats_core`'s normality machinery instead of duplicating it.
-4. **Confidence intervals on Cpk**, plus Cpm (Taguchi). Point estimates at n=30 imply far more precision than exists.
-5. **Phase II monitoring.** The old README called Phase I "the foundation step before deploying Phase II" — never built. With baselines persisted, applying frozen limits to incoming data is a natural next route.
-6. **Guided flow entry.** Add a `goal: "monitor_process"` branch to `guided/decisionTree.ts` routing to SPC.
+Guided-flow entry (a `monitor_process` branch in `decisionTree.ts` routing to SPC) was **not**
+done — it's a two-line addition with no methodology risk, deferred as genuinely low-value next to
+everything above, not forgotten.
 
 ### Phase 5 — Documentation ✅ complete (including in-app)
 
@@ -284,7 +293,8 @@ Ordered by value:
 - ✅ `docs/spc-user-guide.md` — rewritten for the two front doors (Analyze entries, SPC Studio) rather than the old five Streamlit pages; ends with an explicit "not yet supported" list so the Phase 4 gaps are stated rather than discovered.
 - ✅ `README.md` — SPC section, module tree, and the `pyodide-runtime.json` manifest.
 - ✅ **In-app docs at `/docs`** — the markdown under `docs/` is imported `?raw` and bundled, so the page and the repo cannot disagree and the docs work offline in an installed PWA. Needed `server.fs.allow` for dev and a `COPY docs` in the frontend image stage.
-- ✅ **Widened beyond SPC.** SPC is 4 of 47 tests and the docs were implying otherwise. Added `docs/getting-started.md` and `docs/statistical-methods.md` (all 14 families, with LaTeX formulas), plus a **generated test reference** built from the registry — so a new test documents itself and the reference can never drift from what the app does. KaTeX renders equations, bundled locally with its fonts so no CDN is involved.
+- ✅ **Widened beyond SPC.** SPC was 4 of 47 tests (now 9 of 52, after Phase 4) and the docs were implying otherwise. Added `docs/getting-started.md` and `docs/statistical-methods.md` (all 14 families, with LaTeX formulas), plus a **generated test reference** built from the registry — so a new test documents itself and the reference can never drift from what the app does.
+- ✅ **Equations properly typeset, not left in code fences.** KaTeX + a custom `remark`-free markdown pipeline (`marked` extensions for `$…$`/`$$…$$`), fonts bundled locally so no CDN is involved and equations render offline. Caught and fixed one real bug: heading anchors must slug the *raw* markdown, not the rendered HTML — `marked` escapes an apostrophe to `&#39;`, which silently broke 4 of 43 table-of-contents links until both sides shared one slug function. Verified: 90 KaTeX nodes across the docs, zero parse errors, all 45 anchors resolve.
 
 **Fidelity check.** The port was compared against the original implementation across 300
 randomised series — every control line, all four rules, the MR rules and the flagged-point list.

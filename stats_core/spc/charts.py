@@ -12,7 +12,7 @@ import pandas as pd
 
 from stats_core.spc.rules import RULE_COLUMNS, RULE_LABELS, rules_fired
 
-__all__ = ["control_chart_specs", "subgroup_chart_specs"]
+__all__ = ["control_chart_specs", "subgroup_chart_specs", "attribute_chart_specs"]
 
 
 def control_chart_specs(result, column: str) -> list[dict]:
@@ -215,3 +215,55 @@ def subgroup_chart_specs(
     )
 
     return [means_panel, spread_panel]
+
+
+def attribute_chart_specs(chart, *, column: str, violations) -> list[dict]:
+    """One panel for a p, np, c or u chart.
+
+    Constant limits are drawn as labelled rules; varying limits (p and u with
+    unequal sample sizes) are handed over as a per-point series and drawn as a
+    stepped boundary instead.
+    """
+    labels = [str(label) for label in chart.labels]
+    statuses = [
+        "violation" if bool(violations.iloc[i]) else "in control"
+        for i in range(chart.n_points)
+    ]
+    detail = [
+        f"n = {chart.sizes.iloc[i]:g}" if chart.kind in ("p", "np", "u") else ""
+        for i in range(chart.n_points)
+    ]
+
+    spec: dict = {
+        "kind": "controlChart",
+        "panel": "individuals",
+        "title": f"{chart.kind} chart - {column}",
+        "data": {
+            "x": labels,
+            "y": [float(v) for v in chart.values],
+            "status": statuses,
+            "rules": detail,
+        },
+        "lines": [{"value": float(chart.centre), "label": "CL", "kind": "centre"}],
+        "bands": [],
+        "encoding": {
+            "x": {"field": "x", "title": str(chart.labels.name or "Sample")},
+            "y": {"field": "y", "title": chart.y_title},
+        },
+    }
+
+    if chart.constant_limits:
+        spec["lines"].insert(0, {"value": float(chart.ucl.iloc[0]), "label": "UAL", "kind": "action"})
+        # A lower limit pinned at zero is the axis, not a boundary; drawing it
+        # would imply a constraint the chart cannot actually signal against.
+        if float(chart.lcl.iloc[0]) > 0:
+            spec["lines"].append(
+                {"value": float(chart.lcl.iloc[0]), "label": "LAL", "kind": "action"}
+            )
+    else:
+        spec["limitSeries"] = {
+            "ucl": [float(v) for v in chart.ucl],
+            "lcl": [float(v) for v in chart.lcl],
+        }
+
+    return [spec]

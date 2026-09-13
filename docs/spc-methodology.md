@@ -92,9 +92,10 @@ since the constants are defined per n.
 
 ---
 
-## 4. The four rules
+## 4. Rules: Oakland's four, and two named alternatives
 
-Rules 1–4 apply to the individuals chart; rules 1–2 apply to the moving range chart.
+Rules 1–4 apply to the individuals chart; rules 1–2 apply to the moving range chart. These are
+**Oakland's rule set** — what this app has always used, and the default.
 
 ### Rule 1 — Action limits
 Any single point beyond $\pm 3\sigma$. Under normality the false-alarm rate on a single point is $\approx 0.27\%$.
@@ -127,6 +128,27 @@ run at k = 8 flags one point; a 9-point run flags two. This keeps a single long 
 the decision table with a dozen rows describing one event. Rules 1 and 2 flag the offending point
 itself. Every comparison is strict, so a point sitting exactly on a limit or the centre line is
 not a violation.
+
+### Named alternatives: Western Electric and Nelson
+
+Both build on the same **zone** decomposition of the chart — C (0–1σ), B (1–2σ), A (2–3σ), and
+beyond — implemented once in `stats_core/spc/rulesets.py` and shared by every chart.
+
+**Western Electric (1956)**, 4 fixed rules: point beyond 3σ; 2-of-3 beyond 2σ on one side; 4-of-5
+beyond 1σ on one side; a run of 8. Unlike Oakland's set, these thresholds are not configurable —
+they are the published standard.
+
+**Nelson (1984)**, 8 rules: WECO's four action tests, plus a run of 9 (rather than 8), a trend of
+6, 14 points alternating up and down (over-adjustment), and two pattern tests worth naming because
+they catch something the others cannot:
+
+- **Stratification** — 15 consecutive points all within 1σ. Counter-intuitively, spread that is *too small* is a signal: it usually means the subgroups are not independent, or the data has been averaged or massaged before charting.
+- **Mixture** — 8 consecutive points all beyond 1σ on either side, none in zone C. The signature of two distinct populations (two machines, two operators) being plotted as one series.
+
+More rules raise sensitivity and the false-alarm rate together. On a genuinely stable process,
+simulation puts Western Electric at roughly 1.4 false signals per 100 points and Nelson at 1.9 —
+confirmed against this implementation, not merely asserted. Choose the set your organisation
+standardises on.
 
 ---
 
@@ -187,7 +209,44 @@ are reported as provisional.
 
 ---
 
-## 6. Normality pre-check
+## 6. Attribute charts: p, np, c, u
+
+Every chart so far plots a **measurement** and estimates sigma from it. Attribute charts plot a
+**count**, and their limits come from the count's own distribution instead.
+
+| Chart | Plots | Distribution | Sample size |
+|---|---|---|---|
+| **p** | proportion defective | binomial | may vary |
+| **np** | number defective | binomial | constant |
+| **c** | defect count | Poisson | one fixed unit |
+| **u** | defects per unit | Poisson | may vary |
+
+**Defective vs. defect.** A defective is a unit that failed inspection; a defect is one fault, and
+a unit can carry more than one. Counting defectives caps the count at the sample size (binomial);
+counting defects does not (Poisson). The two chart families are not interchangeable, and using the
+wrong one produces limits that are wrong in a way no amount of data will reveal.
+
+$$p\text{-chart: } \quad \bar{p} \pm 3\sqrt{\frac{\bar{p}(1-\bar{p})}{n_i}}
+\qquad\qquad
+np\text{-chart: } \quad n\bar{p} \pm 3\sqrt{n\bar{p}(1-\bar{p})}$$
+
+$$c\text{-chart: } \quad \bar{c} \pm 3\sqrt{\bar{c}}
+\qquad\qquad
+u\text{-chart: } \quad \bar{u} \pm 3\sqrt{\frac{\bar{u}}{n_i}}$$
+
+The subscript $i$ on $n$ matters: when the sample size varies between points, **so do the limits**
+on the p and u charts — a proportion estimated from 1000 units is far better determined than one
+from 20, and constant limits would flag the small samples relentlessly. The app draws a varying
+limit as a stepped boundary rather than a straight line, so the changing precision is visible.
+
+Both limit formulas assume the count is close enough to normal for a $\pm 3\sigma$ approximation
+to hold, which needs an expected count of roughly 5 or more. Below that — a rare defect, a small
+sample — the app flags the limits as approximate; the lower limit is frequently pinned at zero in
+this regime, so the chart can then only ever signal an *increase*, never a decrease.
+
+---
+
+## 7. Normality pre-check
 
 Shewhart limits assume approximately normal individual measurements; severe non-normality inflates
 the false-alarm rate.
@@ -204,7 +263,7 @@ transforming.
 
 ---
 
-## 7. Process capability
+## 8. Process capability
 
 $\hat{\sigma}_{\text{within}}$ (short-term, from $\overline{MR}/d_2$) captures only inherent
 point-to-point variation and drives $C_p$ and $C_{pk}$. $\hat{\sigma}_{\text{overall}}$ (the
@@ -238,9 +297,77 @@ Capability assumes a stable process. Computed on out-of-control data the numbers
 but predict nothing, and the app says so prominently rather than refusing to compute — analysts
 routinely need the figure before a baseline is certified.
 
+### Interval estimate for Cpk
+
+Every index above is a point estimate from a finite sample, and Cpk's sampling variability is
+larger than its usual three decimal places suggest. An approximate 95% interval (Bissell, 1990):
+
+$$SE(C_{pk}) \approx \sqrt{\frac{1}{9n} + \frac{C_{pk}^2}{2(n-1)}}
+\qquad\qquad
+C_{pk} \pm 1.96 \cdot SE(C_{pk})$$
+
+At $n = 30$ a reported $C_{pk}$ of 1.33 is compatible with anything from roughly 1.0 to 1.7 — worth
+knowing before treating the third decimal as meaningful.
+
+### Cpm: penalising distance from target
+
+Cp and Cpk both treat the tolerance band as the only thing that matters — a process centred
+anywhere inside it scores the same as one dead on nominal, provided the spread is equal. Taguchi's
+$C_{pm}$ folds a target $T$ into the denominator:
+
+$$C_{pm} = \frac{USL - LSL}{6\sqrt{\sigma^2 + (\mu - T)^2}}$$
+
+so drifting off-target costs capability even while remaining on-spec. Use it where being close to
+nominal has value in itself — typically assembly, where individually-in-spec parts still stack
+their deviations from nominal into a compounded error.
+
+### Non-normal data: percentile method and Box-Cox
+
+Cp and Cpk convert a sigma distance into a tail probability, which is only valid under normality.
+On skewed data that conversion is usually **optimistic** — the long tail is normally the side
+producing defects, and a normal-theory estimate underweights it. Two honest alternatives:
+
+**Percentile capability (ISO 22514-2).** Replace the $\pm 3\sigma$ span with the *observed*
+0.135th and 99.865th percentiles — the points a normal distribution would place three sigma out:
+
+$$P_p^{\text{(pctl)}} = \frac{USL - LSL}{x_{99.865} - x_{0.135}}$$
+
+No distributional assumption, at the cost of estimating an extreme percentile from a finite
+sample, which is inherently noisy with only a few dozen points.
+
+**Box-Cox transform.** Search for a power $\lambda$ such that $x^{(\lambda)}$ is closer to normal,
+report the Shapiro-Wilk p-value before and after, and let the analyst judge whether transforming
+and re-running the standard formulas in the transformed space is worthwhile.
+
+Neither is applied automatically — the app surfaces both as options once the normality pre-check
+fails, and states plainly that the default Cp/Cpk are questionable on that data rather than
+silently reporting an optimistic number.
+
 ---
 
-## 8. Deliberate deviations from the original tool
+## 9. Phase II: monitoring against a frozen baseline
+
+Phase I and Phase II ask different questions. Phase I: *was this process stable, and what are its
+limits?* Phase II: *is it still behaving like that baseline?*
+
+The distinction that matters is what happens to the limits. Phase II **never recomputes them from
+the new data** — they are supplied from a certified Phase I baseline (its centre line and
+$\hat{\sigma}_{\text{within}}$) and applied unchanged. Recomputing would be self-defeating: a
+process that has drifted would redraw its own limits around the new mean and appear perfectly in
+control, which is precisely the failure Phase II exists to catch.
+
+Any of the three rule sets (§4) can be applied to the incoming stream. A sustained shift is also
+reported directly, in sigma units:
+
+$$\text{shift} = \frac{\bar{x}_{\text{new}} - \bar{x}_{\text{baseline}}}{\hat{\sigma}_{\text{within}}}$$
+
+A shift beyond about 1$\sigma$ that persists is the app's cue that the baseline no longer
+describes the process — the right response is to investigate, then re-establish Phase I on new
+data, not to keep monitoring against limits that no longer apply.
+
+---
+
+## 10. Deliberate deviations from the original tool
 
 Recorded so nobody has to rediscover them by diffing against
 [SPC-analysis](https://github.com/jlleongarcia/SPC-analysis).
@@ -256,7 +383,7 @@ series covering every control line, all four rules and the MR rules.
 
 ---
 
-## 9. References
+## 11. References
 
 - Oakland, J.S. *Statistical Process Control*, Ch. 4–5.
 - Wheeler, D.J. *Understanding Statistical Process Control*.
@@ -265,3 +392,5 @@ series covering every control line, all four rules and the MR rules.
 - Western Electric Co. (1956). *Statistical Quality Control Handbook*. AT&T Technologies.
 - AIAG (2010). *Statistical Process Control Reference Manual*, 2nd ed.
 - ASTM E2587 / ISO 7870-2 — control chart constants.
+- ISO 22514-2 — process capability, percentile method for non-normal distributions.
+- Bissell, A.F. (1990). How reliable is your capability index? *Applied Statistics*, 39(3), 331–340.
