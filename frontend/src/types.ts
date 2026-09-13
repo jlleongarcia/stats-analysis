@@ -85,7 +85,7 @@ export interface ResultTable {
 
 export interface PlotSpec {
   kind: "histogram" | "box" | "scatter" | "bar" | "heatmap" | "interaction"
-      | "line" | "dendrogram" | "tree";
+      | "line" | "dendrogram" | "tree" | "controlChart";
   data: Record<string, unknown[]>;
   encoding?: Record<string, { field: string; title?: string }>;
   [k: string]: unknown;

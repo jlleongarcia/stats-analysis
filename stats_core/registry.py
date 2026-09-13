@@ -19,6 +19,7 @@ from stats_core import location_tests as loc
 from stats_core import multivariate as mv
 from stats_core import nonparametric as npar
 from stats_core import normality, regression, reliability, variance_tests
+from stats_core.spc import entries as spc
 from stats_core._util import DataError
 from stats_core.results import TestResult
 
@@ -487,6 +488,54 @@ REGISTRY: tuple[TestSpec, ...] = (
         reliability.reliability_analysis,
         roles=(Role("columns", "Items (>= 3 numeric columns)", NUMERIC, multiple=True),),
     ),
+    # ---- statistical process control ---------------------------------------
+    TestSpec(
+        "control_chart_imr", "Control chart (Individuals & Moving Range)", "spc",
+        "Plots measurements in the order they were taken against control limits "
+        "derived from the average moving range, flagging points that violate the "
+        "Shewhart rules. Row order is the time axis.",
+        spc.control_chart_imr,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="One numeric measurement per observation, in process order."),
+            Role("order", "Observation label (optional)", ANY, required=False,
+                 help="Date, batch or sample ID for the x axis. Used as a label "
+                       "only - the chart never re-sorts your rows."),
+        ),
+        params=(
+            Param("rule2_k", "Rule 2 - points in the warning zone", "number", 2),
+            Param("rule2_window", "Rule 2 - window", "number", 3),
+            Param("rule3_k", "Rule 3 - run length", "number", 8),
+            Param("rule4_k", "Rule 4 - trend length", "number", 6),
+        ),
+        assumptions=(
+            "Observations are in time order",
+            "Measurements are approximately normal",
+            "Observations are independent",
+        ),
+        min_n=2,
+    ),
+    TestSpec(
+        "process_capability", "Process capability (Cp, Cpk, Pp, Ppk)", "spc",
+        "Compares the process spread against specification limits. Cp/Cpk use the "
+        "short-term (within) sigma from the moving range; Pp/Ppk use the long-term "
+        "sample sigma. Only meaningful for a process in statistical control.",
+        spc.process_capability,
+        roles=(
+            Role("values", "Measurement", NUMERIC,
+                 help="One numeric measurement per observation, in process order."),
+            Role("order", "Observation label (optional)", ANY, required=False),
+        ),
+        params=(
+            Param("usl", "Upper specification limit (USL)", "number", None),
+            Param("lsl", "Lower specification limit (LSL)", "number", None),
+        ),
+        assumptions=(
+            "Process is in statistical control",
+            "Measurements are approximately normal",
+        ),
+        min_n=2,
+    ),
 )
 
 _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}
@@ -494,7 +543,7 @@ _BY_ID: dict[str, TestSpec] = {spec.id: spec for spec in REGISTRY}
 FAMILIES: tuple[str, ...] = (
     "descriptive", "normality", "t-test", "nonparametric",
     "anova", "correlation", "regression", "categorical", "variance",
-    "multivariate", "clustering", "classification", "reliability",
+    "multivariate", "clustering", "classification", "reliability", "spc",
 )
 
 

@@ -672,3 +672,130 @@ class TestSpcCall:
 
         out = spc_call("evaluate", {"data": spc_frame, "column": "measurement"})
         json.dumps(out)  # must not raise on numpy scalars or NaN
+
+
+# --------------------------------------------------------------------------
+# registry entries (the stateless half)
+# --------------------------------------------------------------------------
+
+
+class TestRegistryEntries:
+    """The two Analyze-page entries, exercised without the gitignored fixtures."""
+
+    @staticmethod
+    def _frame(spc_frame) -> pd.DataFrame:
+        return pd.DataFrame(spc_frame)
+
+    def test_both_entries_are_registered_under_the_spc_family(self):
+        from stats_core import get_registry
+
+        reg = get_registry()
+        assert "spc" in reg["families"]
+        spc_ids = {t["id"] for t in reg["tests"] if t["family"] == "spc"}
+        assert spc_ids == {"control_chart_imr", "process_capability"}
+
+    def test_control_chart_emits_two_labelled_panels(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test("control_chart_imr", spc_frame, {"values": "measurement", "order": "day"}, {})
+        panels = [p["panel"] for p in out["plotSpecs"]]
+        assert panels == ["individuals", "movingRange"]
+        assert all(p["kind"] == "controlChart" for p in out["plotSpecs"])
+        assert all(p["title"] for p in out["plotSpecs"])
+
+    def test_individuals_panel_carries_five_lines_and_warning_bands_only(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {})
+        individuals = out["plotSpecs"][0]
+        assert [line["label"] for line in individuals["lines"]] == [
+            "UAL", "UWL", "CL", "LWL", "LAL",
+        ]
+        # Centre-zone shading was deliberately dropped; only the 2-3 sigma
+        # warning zones are shaded.
+        assert {band["kind"] for band in individuals["bands"]} == {"warning"}
+        assert len(individuals["bands"]) == 2
+
+    def test_moving_range_panel_drops_the_first_observation(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {})
+        individuals, moving_range = out["plotSpecs"]
+        assert len(moving_range["data"]["x"]) == len(individuals["data"]["x"]) - 1
+
+    def test_violations_are_marked_in_the_chart_payload(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {})
+        statuses = out["plotSpecs"][0]["data"]["status"]
+        assert statuses[25] == "violation"
+        assert set(statuses) <= {"in control", "violation"}
+        # The tooltip text names the rule, so the chart is never colour-only.
+        assert "Rule 1" in out["plotSpecs"][0]["data"]["rules"][25]
+
+    def test_chart_never_claims_to_be_a_baseline(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {})
+        assert any("not a certified Phase I baseline" in n for n in out["notes"])
+
+    def test_row_order_is_the_time_axis_not_the_label_order(self, spc_frame):
+        from stats_core import run_test
+
+        # Labels deliberately out of lexical order: the chart must not re-sort.
+        frame = dict(spc_frame)
+        frame["day"] = [f"D{n}" for n in range(len(frame["measurement"]), 0, -1)]
+        out = run_test("control_chart_imr", frame, {"values": "measurement", "order": "day"}, {})
+        assert out["plotSpecs"][0]["data"]["x"][0] == "D50"
+        assert out["plotSpecs"][0]["data"]["y"][0] == pytest.approx(frame["measurement"][0])
+
+    def test_capability_reports_the_four_indices(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test(
+            "process_capability", spc_frame, {"values": "measurement"},
+            {"usl": 106.0, "lsl": 94.0},
+        )
+        assert {"Cp", "Cpk", "Pp", "Ppk"} <= set(out["statistic"])
+        assert out["plotSpecs"][0]["kind"] == "histogram"
+        assert [r["label"] for r in out["plotSpecs"][0]["rules"]] == ["LSL", "USL", "mean"]
+
+    def test_capability_leads_with_the_out_of_control_caveat(self, spc_frame):
+        from stats_core import run_test
+
+        out = run_test(
+            "process_capability", spc_frame, {"values": "measurement"},
+            {"usl": 106.0, "lsl": 94.0},
+        )
+        assert "not in statistical control" in out["notes"][0]
+
+    def test_capability_requires_both_spec_limits(self, spc_frame):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="specification limits are required"):
+            run_test("process_capability", spc_frame, {"values": "measurement"}, {"usl": 106.0})
+
+    def test_inverted_spec_limits_are_rejected(self, spc_frame):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="must be greater"):
+            run_test(
+                "process_capability", spc_frame, {"values": "measurement"},
+                {"usl": 94.0, "lsl": 106.0},
+            )
+
+    def test_label_column_cannot_be_the_measurement(self, spc_frame):
+        from stats_core import run_test
+
+        with pytest.raises(DataError, match="different"):
+            run_test(
+                "control_chart_imr", spc_frame,
+                {"values": "measurement", "order": "measurement"}, {},
+            )
+
+    def test_rule_thresholds_are_honoured(self, spc_frame):
+        from stats_core import run_test
+
+        loose = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {"rule3_k": 15})
+        tight = run_test("control_chart_imr", spc_frame, {"values": "measurement"}, {"rule3_k": 5})
+        assert tight["statistic"]["flagged"] >= loose["statistic"]["flagged"]

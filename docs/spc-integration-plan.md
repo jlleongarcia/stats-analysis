@@ -3,7 +3,7 @@
 Folding [`SPC-analysis`](https://github.com/jlleongarcia/SPC-analysis) into `stats-analysis`,
 after which the SPC repository is decommissioned.
 
-**Status:** Phase 1 complete · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
+**Status:** Phases 1-2 complete · **Target:** SPC as a first-class capability of the PWA · **Endgame:** old repo deleted
 
 ---
 
@@ -168,26 +168,31 @@ Correctness items to fold in **during** the port, not after:
 
 **Gate:** `uv run pytest` green, with `tests/test_spc_core.py` ported plus new tests for the six rescued behaviours.
 
-### Phase 2 — Registry entries + control chart rendering
+### Phase 2 — Registry entries + control chart rendering ✅ complete
 
-- [ ] Add family `"spc"` to `FAMILIES` in `stats_core/registry.py`.
-- [ ] `TestSpec("control_chart_imr", …)` — roles: values, optional order; params: rule thresholds. Returns limits in `statistic`, a control-lines `ResultTable`, normality as `AssumptionCheck`, and a `controlChart` plot spec.
-- [ ] `TestSpec("process_capability", …)` — params: `usl`, `lsl`. Cp/Cpk/Pp/Ppk into `statistic`; verdicts into `notes`; distribution-vs-spec histogram plot.
-- [ ] `PlotSpec` kind `"controlChart"` in `frontend/src/types.ts` and a case in `viz/buildSpec.ts`.
-- [ ] Register both in `tests/test_registry_smoke.py`'s role table.
+`stats_core/spc/entries.py` + family `"spc"`; `controlChart` renderer in `viz/buildSpec.ts`.
+94 SPC tests passing, `tsc` clean, production build green.
 
-The Vega-Lite spec is the fiddly part. It must reproduce what `imr.py` did well:
+- `control_chart_imr` — roles: measurement + optional label; params: the four rule thresholds. Emits limits in `statistic`, a control-lines table, a flagged-points table, normality as an `AssumptionCheck`, and two `controlChart` plot specs.
+- `process_capability` — params `usl`/`lsl`. Cp/Cpk/Pp/Ppk in `statistic`, verdicts in `notes`, a spec-limit histogram.
 
-- shaded zones (CL↔WL green, WL↔AL amber) as `rect` layers
-- five labelled limit lines on the I chart (UAL/UWL/CL/LWL/LAL), three on MR
-- one continuous line through **all** points in order, markers coloured by violation status
-- tooltips naming which rules fired
-- faded "ghost" markers for previously removed points
-- I and MR vertically concatenated on a shared x axis
+Both carry a note that they are **not** a certified Phase I baseline, and `process_capability`
+leads with the out-of-control caveat when the data still shows violations (decision 2 in §6).
 
-Load the `dataviz` skill before writing the spec, and verify the palette in both light and dark themes.
+**Design decisions made during the build:**
 
-**Gate:** an I-MR chart and a capability run are reachable from `/analyze` on a real dataset.
+- **Two plot specs, not one `vconcat`.** Vega-Lite's responsive `width: "container"` is unsupported inside concatenations, and a control chart that cannot fill its panel is worse than one not pixel-aligned with the chart below it.
+- **Which lines and zones each panel carries is decided in Python**, not the renderer — it is SPC domain knowledge and is covered by tests. `buildSpec.ts` only maps `kind` → colour/dash.
+- **Colour is never the only cue.** The validator put warning-amber and centre-emerald ~3 ΔE apart under tritanopia, so every reference line also has a distinct dash pattern and a direct right-edge label, and violations differ in shape (triangle) and size as well as hue.
+- **Centre-zone shading was tried and dropped.** On the dark ground the two tints were barely tellable apart; only the 2–3σ warning zones are shaded now.
+
+**Three bugs that only rendering caught** (compiling was clean throughout):
+
+1. **Y axis anchored at zero**, crushing a 92–120 series into the top fifth of the plot. Fatal for a chart whose job is resolving small excursions. Now `zero: false` on individuals, `true` on moving range (whose lower limit genuinely is zero).
+2. **Limit labels stacked at the far left and the x axis reordered to `D50, D1, D2…`** — the label layers used `x: {datum: lastLabel}`, which injected that label into the shared ordinal domain *ahead of* the data layer. Labels are now positioned by pixel expression (`x: {expr: "width"}`), bypassing the scale.
+3. **A point outside the action limit clipped against the axis edge** — the single point a reader most needs. Fixed with scale padding.
+
+**Gate met:** both entries run end-to-end; charts verified by headless Vega render and visual inspection.
 
 ### Phase 3 — SPC Studio (`/spc`)
 

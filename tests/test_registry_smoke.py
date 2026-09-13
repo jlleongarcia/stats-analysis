@@ -67,6 +67,17 @@ def _roles_for(test_id, ceras, fame, fame2, two_group_ceras, campaign_col):
         ),
         "classification_tree": (ceras, {"outcome": campaign_col, "predictors": num}, {}),
         "reliability_analysis": (ceras, {"columns": num[:4]}, {}),
+        "control_chart_imr": (ceras, {"values": num[0]}, {}),
+        "process_capability": (
+            ceras,
+            {"values": num[0]},
+            # Spec limits straddling the observed spread, so the indices are
+            # finite and the test exercises the real arithmetic.
+            {
+                "usl": float(ceras[num[0]].mean() + 3 * ceras[num[0]].std()),
+                "lsl": float(ceras[num[0]].mean() - 3 * ceras[num[0]].std()),
+            },
+        ),
     }
     return table[test_id]
 
