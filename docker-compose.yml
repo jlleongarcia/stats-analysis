@@ -10,7 +10,7 @@ services:
       context: .
       dockerfile: Dockerfile
       target: runtime
-    image: stats-analysis:latest
+    image: ghcr.io/jlleongarcia/stats-analysis:latest
     ports:
       - "7100:80"
     restart: unless-stopped
