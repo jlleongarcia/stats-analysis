@@ -2,11 +2,11 @@ name: CI
 
 # Fast feedback for pull requests: run the test suites, then confirm the
 # multi-arch image still builds cleanly (no push). This shares its Buildx
-# cache scope with docker-publish.yml, so a merge into main reuses layers
+# cache scope with docker-publish.yml, so a merge into master reuses layers
 # already warmed here instead of rebuilding from scratch.
 on:
   pull_request:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 concurrency:
