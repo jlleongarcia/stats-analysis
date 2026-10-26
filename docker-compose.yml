@@ -13,7 +13,7 @@ services:
     image: ghcr.io/jlleongarcia/stats-analysis:latest
     ports:
       - "7100:80"
-    restart: unless-stopped
+    restart: always
 
   dev:
     build:
